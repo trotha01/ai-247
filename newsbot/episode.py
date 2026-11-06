@@ -148,10 +148,12 @@ def render_scenes(scenes, ticker: str, master: Path, out: Path, prefix: str = "s
     surface = cards.new_surface()
     canvas = surface.getCanvas()
     out.mkdir(parents=True, exist_ok=True)
-    cmd = ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", f"{cards.W}x{cards.H}",
+    cmd = ["ffmpeg", "-y", "-nostats", "-loglevel", "warning", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", f"{cards.W}x{cards.H}",
            "-r", str(cards.FPS), "-i", "-", "-i", str(master), *encode_args(total),
            "-hls_segment_filename", str(out / f"{prefix}_%03d.ts"), str(out / "index.m3u8")]
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    errlog = out.parent / f"ffmpeg_{prefix}.log"  # a file, not a pipe: an undrained stderr pipe deadlocks long encodes
+    errf = open(errlog, "wb")
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=errf)
     draw_s, t0, frame = 0.0, time.time(), 0
     for sc in scenes:
         n = int(round(sc["duration"] * cards.FPS))
@@ -163,9 +165,10 @@ def render_scenes(scenes, ticker: str, master: Path, out: Path, prefix: str = "s
             p.stdin.write(buf)
             frame += 1
     p.stdin.close()
-    err = p.stderr.read().decode("utf-8", "replace")
-    if p.wait() != 0:
-        raise RuntimeError("ffmpeg failed: " + err[-800:])
+    rc = p.wait()
+    errf.close()
+    if rc != 0:
+        raise RuntimeError("ffmpeg failed: " + errlog.read_text(errors="replace")[-800:])
     return {"frames": frame, "skia_fps_draw_and_readback": round(frame / draw_s, 1),
             "pipeline_fps_incl_encode": round(frame / (time.time() - t0), 1)}
 
