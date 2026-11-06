@@ -1,6 +1,9 @@
-"""Replay-pool bootstrap: publish `pool/manifest.json`, the loop the Worker falls back to when `manifest.json` is
-missing, empty, stale or points at missing segments (see docs/FAILOVER.md). No cron, no notifier: run it once by
-hand (`python -m newsbot.replay_pool ...`) or from the dispatch-only workflow `.github/workflows/replay-pool.yml`.
+"""Replay-pool bootstrap and refresh: publish `pool/manifest.json`, the loop the Worker falls back to when
+`manifest.json` is missing, empty, stale or points at missing segments (see docs/FAILOVER.md). No notifier: run it
+by hand (`python -m newsbot.replay_pool ...`) or from `.github/workflows/replay-pool.yml` (manual, plus a daily
+cron that refreshes the pool from the newest episodes). The refresh is guarded: an existing good pool manifest is
+never replaced by one with nothing playable (and nothing is written when no complete episode exists), and it is
+left untouched when the newest episodes are the ones it already lists.
 
 Two ways to build the pool:
   --from-r2        pick the newest bulletin/episode already in R2 (`bulletins/<ts>/manifest.json`) whose segments
@@ -152,6 +155,34 @@ def pool_from_r2(s3, bucket: str, prefix: str = BULLETIN_PREFIX, max_blocks: int
     return build_pool_manifest(blocks, epoch, built_from, seg_s), report
 
 
+def pool_usable(manifest) -> bool:
+    """What the Worker's `layout()` accepts as a pool: at least one segment, every duration > 0, every uri set."""
+    if not isinstance(manifest, dict):
+        return False
+    segs = _segments_of(manifest)
+    return bool(segs) and all(s.get("uri") and float(s.get("duration") or 0) > 0 for s in segs)
+
+
+def existing_pool(s3, bucket: str, pool_key: str = POOL_KEY) -> dict | None:
+    """The pool manifest currently in R2, or None when it is missing or not JSON."""
+    try:
+        return _get_json(s3, bucket, pool_key)
+    except Exception:
+        return None
+
+
+def refresh_decision(existing: dict | None, new: dict, force: bool = False) -> tuple[bool, str]:
+    """Guard for the scheduled refresh: (publish?, reason). A good pool in R2 is never replaced by a manifest with
+    nothing playable, and is left alone (no PutObject) when the new one lists exactly the same segments."""
+    if not pool_usable(new):
+        return False, "new pool manifest has no playable segments; keeping the existing pool/manifest.json"
+    if force or not pool_usable(existing):
+        return True, "no usable pool in R2 yet" if not pool_usable(existing) else "forced"
+    if [s["uri"] for s in _segments_of(existing)] == [s["uri"] for s in _segments_of(new)]:
+        return False, f"unchanged: pool already lists these {len(_segments_of(new))} segments (built_at {existing.get('built_at')})"
+    return True, "newer episodes available"
+
+
 def publish(s3, bucket: str, manifest: dict, local_blocks: list[dict] | None = None, pool_key: str = POOL_KEY) -> list[str]:
     """Upload local block segments (if any) under their pool keys, then the pool manifest LAST in one PutObject.
     Returns the keys written in order."""
@@ -178,6 +209,7 @@ def main(argv=None) -> int:
     ap.add_argument("--pool-key", default=POOL_KEY)
     ap.add_argument("--write", default="pool-manifest.json", help="also write the pool manifest to this local path")
     ap.add_argument("--upload", action="store_true", help="publish to R2 (needs R2_* env; otherwise only --write happens)")
+    ap.add_argument("--force", action="store_true", help="--upload: rewrite the pool manifest even when it would list the same segments")
     a = ap.parse_args(argv)
     if not a.from_r2 and not a.from_dir:
         ap.error("choose --from-r2 and/or --from-dir DIR")
@@ -194,7 +226,12 @@ def main(argv=None) -> int:
 
     blocks, local_blocks, report, epoch, seg_s = [], [], {}, a.epoch, 6
     if a.from_r2 and s3:
-        m, report = pool_from_r2(s3, bucket, a.bulletin_prefix, a.max_blocks, a.epoch)
+        try:
+            m, report = pool_from_r2(s3, bucket, a.bulletin_prefix, a.max_blocks, a.epoch)
+        except RuntimeError as e:
+            # Nothing complete to loop: leave whatever pool/manifest.json is already in R2 untouched.
+            print(f"{e}; {a.pool_key} not touched")
+            return 3
         blocks, epoch, seg_s = list(m["blocks"]), m.get("epoch"), int(m["segment_seconds"])
     for i, d in enumerate(a.from_dir):
         d = Path(d)
@@ -213,8 +250,12 @@ def main(argv=None) -> int:
     for sk in report.get("skipped", []):
         print(f"  skipped {sk['manifest_key']}: {'; '.join(sk['problems'])}")
     if a.upload and s3:
+        go, why = refresh_decision(existing_pool(s3, bucket, a.pool_key), manifest, a.force)
+        if not go:
+            print(f"not uploading: {why}")
+            return 0
         written = publish(s3, bucket, manifest, local_blocks, a.pool_key)
-        print(f"uploaded {len(written)} object(s); {a.pool_key} written last")
+        print(f"uploaded {len(written)} object(s) ({why}); {a.pool_key} written last")
     return 0
 
 
