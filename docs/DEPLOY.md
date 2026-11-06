@@ -6,7 +6,7 @@ Production deploys happen automatically from `.github/workflows/deploy.yml` on e
 
 | Changed paths | Job | What happens |
 |---|---|---|
-| `worker/**`, `scripts/smoke.sh`, the workflow | `test-worker` then `deploy-worker` | `npm test` in `worker/` (unit + `wrangler dev --local`); only if green, `wrangler deploy` of the Worker `ai247-live` (name from `worker/wrangler.toml`), then `scripts/smoke.sh <worker url>`. |
+| `worker/**`, `scripts/smoke.sh`, the workflow | `test-worker` then `deploy-worker` | `npm run test:unit` and `npm run test:dev` in `worker/` (the uploader/browser e2e runs in `ci.yml`); only if green, `wrangler deploy` of the Worker `ai247-live` (name from `worker/wrangler.toml`), then `scripts/smoke.sh <worker url>`. |
 | `site/**`, the workflow | `deploy-site` | `wrangler pages deploy site/ --project-name=ai-247`, then a curl of `https://ai-247.pages.dev/`. |
 
 The Pages project `ai-247` was created by direct upload and is **not Git-connected**, so this workflow is the only thing that updates the site after a merge. Both jobs run under one concurrency group (`deploy-production`), so deploys queue instead of overlapping. The workflow can also be run by hand (Actions -> deploy -> Run workflow, choose `all`, `worker` or `site`).
@@ -15,7 +15,7 @@ The smoke test fails the job if `/healthz` is not `ok`, `/live.m3u8` does not st
 
 ## Required secrets (repository secrets, names only)
 
-- `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, Cloudflare Pages: Edit, Account Settings: Read)
+- `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, Cloudflare Pages: Edit, Account Settings: Read). The first run (42211838846) failed `pages deploy` with `Authentication error [code: 10000]` on `/accounts/<id>/pages/projects/ai-247`: the current token lacks the Pages: Edit permission (or the project lives in another account). Fix the token, then re-run the workflow.
 - `CLOUDFLARE_ACCOUNT_ID`
 
 If either is missing the deploy jobs print a warning and exit successfully (no-op), so merging never breaks `main`. Add the secrets and re-run the workflow.
