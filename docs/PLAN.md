@@ -145,3 +145,16 @@ Runner CPU differed between runs (Intel Xeon Platinum 8573C at 65 fps skia draw 
 - **Post-fix Haiku run 42210163643 (main, defaults: tts kokoro, llm on, 2026-11-06 11:25Z): success.** Install 38 s; episode 600.0 s / 100 segments (target 600 +/- 15); 10 stories aired (12 ranked), 27.5 s pad; 38 aired sentences, 38 supported (100%); fact check 58 drafted, 49 supported first pass (84%), 1 rewritten (supported), 0 dropped, 0 fallback stories; cost 0.00457 USD; pipeline 530 s (script 36 s, TTS+plan 192 s, render+encode 279 s), render step 8 min 50 s of the 25 min limit; tests 58 passed, 1 skipped; artifact `episode-day1` uploaded. R2 upload and `manifest.json` to R2: **no**, day1.yml passes no R2 secrets and `newsbot/day1.py` does not call `newsbot/r2.py` (only the Day 0 bulletin path does); still open.
 - HLS segments are separately encoded files, so each block join needs `EXT-X-DISCONTINUITY`; true continuity across files would need timestamp rewriting (not done).
 - No R2 upload was exercised (no R2 secrets). Replays come from earlier workflow artifacts.
+
+## R2 upload verified (2026-11-06)
+
+Day 1 had no R2 upload until PR #18 (`newsbot/publish.py`, step "Publish to R2" in `day1.yml`, run after the render's tests, skipped with one log line when the `R2_*` secrets are absent). Layout: `docs/R2_LAYOUT.md` (B) with the continuity fields of `docs/MANIFEST-SWAP.md`. The Day 0 path (`newsbot/r2.py: upload`) also ran once with the real secrets: run 42211796435 (day0-bulletin on main), `r2_upload` stage 18.4 s, 53 tests passed, Day 0 layout `bulletins/<ts>/` with `manifest.json` before the segments (unchanged, not used by the Worker).
+
+| Run (day1-episode on main) | Keys written, in order | Objects / bytes | Publish time |
+|---|---|---|---|
+| 42212912268, `llm=off` (extractive, 28 sentences, 100% grounded, 75 tests passed) | `bulletins/20261106T115430Z/seg_000.ts` .. `seg_099.ts` (`video/mp2t`), `bulletins/20261106T115430Z/manifest.json`, `bulletins/20261106T115430Z/slate/slate_000.ts` .. `slate_004.ts`, `.../slate/manifest.json`, then root `manifest.json` (`application/json`, one PutObject, last) | 108 / 34,139,323 | 116 s (render pipeline 326 s, install 31 s) |
+| RUN2_PLACEHOLDER | | | |
+
+Root manifest after run 1: `epoch` 1793000000 (= the Worker's `EPOCH` var), `cycle_start_k` 161021, `cycle_start_dseq` 0, blocks `[bulletin 20261106T115430Z (100), slate (5)]`, no `prev` (first publish). RUN2_ROOT_PLACEHOLDER
+
+Not verified: no live endpoint. The Worker `ai247-live` is not deployed from `main` (no `deploy.yml` on `main` at the time; a deploy branch exists), so there is no `https://<worker>/healthz` or `/live.m3u8` to read; `https://ai-247.pages.dev` (the stopgap Pages deploy from `docs/DAY3.md`) is blocked from the cloud session's network. Once the Worker is deployed with `PREFIX=""` it reads exactly the root `manifest.json` written above. Artifacts: each run's `episode-day1` artifact includes `publish.json` with every key in order.
