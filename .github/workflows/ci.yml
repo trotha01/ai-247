@@ -35,4 +35,4 @@ jobs:
           done
           echo "install failed after 3 attempts"; exit 1
       - name: Tests (no ANTHROPIC_API_KEY in this job)
-        run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py
+        run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py tests/test_replay_pool.py

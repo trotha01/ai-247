@@ -8,9 +8,9 @@ A Cloudflare Worker that turns `manifest.json` (in R2) plus the clock into a rol
 |---|---|
 | `/live.m3u8` (alias `/index.m3u8`) | Rolling playlist, 5 segments (30 s) ending at the live edge. `cache-control: public, max-age=1`. |
 | `/seg/<key>.ts` | Streams the R2 object `PREFIX + key`; immutable cache. Only `[A-Za-z0-9_.-/]+.ts`, no `..`. |
-| `/healthz` | `ok` |
+| `/healthz` | JSON: which source is on air (`live-manifest` / `replay-pool`), manifest age, pool state (see `docs/FAILOVER.md`). Always 200. |
 
-CORS is `*` (hls.js on Pages is a different origin). 503 if `manifest.json` is missing.
+CORS is `*` (hls.js on Pages is a different origin). If `manifest.json` is missing, empty, stale or points at missing segments the Worker serves the replay pool (`pool/manifest.json`, see `docs/FAILOVER.md`); 503 only when there is neither.
 
 ## Algorithm (port of `newsbot/playlist.py: channel_playlist`, golden-tested against it)
 

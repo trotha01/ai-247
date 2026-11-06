@@ -1,1 +1,1 @@
-{"state":"running","msg":"Survey done (docs, worker, site, workflows, PR #11/#12); building replay-pool failover: worker/src/failover.js + channel.js, newsbot/replay_pool.py bootstrap, tests"}
+{"state":"running","msg":"Failover built and green locally (71 unit + 7 wrangler-dev Worker tests, 8 Python tests); opening PR and waiting for CI"}
