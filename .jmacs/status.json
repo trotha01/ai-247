@@ -1,1 +1,1 @@
-{"state":"done","msg":"Day 2 Worker merged to main via PR #7 (48 local tests, CI green). Not deployed; deploy checklist in docs/DAY2.md."}
+{"state":"done","msg":"PR #11 green and merged: Worker PREFIX fix, e2e (real r2.upload -> local R2 -> Worker -> browser), docs/R2_LAYOUT.md, CI job. Day 1 uploader must write manifest.json last."}

@@ -1,14 +1,18 @@
 # Handoff
 
 ## Objective
-AI-247 Day 2: Cloudflare Worker in worker/ serving a clock-computed rolling fake-live HLS playlist from R2 manifest.json, with unit + wrangler dev tests. Work only in worker/ and docs/. No deploy.
+AI-247 "local end-to-end and R2 key layout" (Worker/site/docs/ci only; newsbot/ untouched; no deploy).
 
 ## Done
-- worker/src (playlist.js, index.js), wrangler.toml, 43 unit tests (golden vs Python reference) + 5 wrangler-dev tests, all pass.
-- docs/DAY2.md (behaviour, limitations, deploy checklist for Trevor).
+- Search done (no kb/~/org available); reused wrangler/miniflare, vitest, hls-parser, Playwright, ffmpeg; no custom HLS code.
+- Found mismatch: r2.py -> `bulletins/<ts>/<file>`, manifest.json uploaded before segments; Worker read root -> 503.
+- Worker: PREFIX normalised, preflight Range, .ts always video/mp2t. docs/R2_LAYOUT.md has the contract.
+- Tests: worker/test/e2e (real r2.upload -> local R2 -> Worker), site/test/e2e-worker.js (browser, cross-origin, real playback). 56 worker tests pass locally; site e2e passes.
+- ci.yml job `worker-site-e2e` added.
 
 ## Pending
-- Nothing; PR #7 merged.
+- (done once merged) PR #11 CI green, merging.
+- Day 1 owner: upload manifest.json LAST (r2.py still sorted-order) and adopt Layout B in docs/R2_LAYOUT.md.
 
 ## Next step
-Trevor: follow the deploy checklist in docs/DAY2.md.
+Nothing for this item. Day 1 owner follows docs/R2_LAYOUT.md (manifest last).

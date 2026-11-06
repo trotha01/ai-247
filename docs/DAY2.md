@@ -20,7 +20,10 @@ CORS is `*` (hls.js on Pages is a different origin). 503 if `manifest.json` is m
 - Manifest shapes accepted: Day 0 `{segments:[{file,duration}]}` (one block) or `{blocks:[{id,segments:[{uri,duration}]}]}` (bulletin, slate, replays; same layout as Day 1 `pool.channel_blocks`). Segment URIs are resolved as `seg/<uri>`, i.e. R2 key `PREFIX + uri`.
 - Manifest is cached in the isolate for 10 s.
 
-## Known limitation: manifest change mid-stream
+## Manifest change mid-stream (resolved: see `docs/MANIFEST-SWAP.md`)
+
+Below is the original limitation; the epoch/`cycle_start_k`/`cycle_start_dseq`/`prev` scheme now covers it.
+
 
 `k % N` is recomputed from whatever manifest is current. When Day 1 uploads a new hourly manifest (different N or contents), the segment behind a given media-sequence number can change for clients that have it cached, and the discontinuity-sequence count restarts from the new layout. hls.js recovers (reloads, may stall a few seconds) but it is not seamless. Fix options for Day 3: publish manifests with an `epoch` and a `cycle_start_k` so the swap happens only at a loop boundary, or have the generator emit the new manifest with `epoch` shifted to keep `k` continuous. Not done here to stay inside the Day 2 scope.
 
@@ -39,10 +42,14 @@ npm run test:unit                      # pure logic only, <1 s
 
 The brief asked for artifact `bulletin-day0` (run 42187611180). Listing it works, but downloading is blocked from the cloud session (the artifact blob host `productionresultssa4.blob.core.windows.net` is refused by the egress proxy). `worker/test/fixtures/bulletin-day0/manifest.json` is therefore a schema-faithful reconstruction of what `newsbot/manifest.py:build_manifest` writes (version, segment_seconds=6, 10 segments with index/file/duration/audio_duration/container_duration/bytes/sha256/scene, sources). Segment payloads are dummy bytes written at test time (`*.ts` is gitignored). The Worker only reads `file` and `duration`. To check against the real artifact: download it, replace the fixture `manifest.json`, rerun `npm test`.
 
+## Key layout and end-to-end tests
+
+The uploader writes `bulletins/<ts>/...` while the Worker originally read the bucket root; fixed Worker-side with `PREFIX`. Exact contract: `docs/R2_LAYOUT.md`. `worker/test/e2e` (uploader -> local R2 -> Worker) and `site/test/e2e-worker.js` (browser) run in CI job `worker-site-e2e`.
+
 ## What Trevor must do to deploy (none of it done)
 
-1. Cloudflare account: create the R2 bucket (`wrangler r2 bucket create ai247-media`, or change `bucket_name` in `worker/wrangler.toml`). The Day 1 uploader (`newsbot/r2.py`) must write `manifest.json` and the `.ts` files at the keys the manifest implies (Day 0 layout: flat; pool layout: `<block-id>/<file>`), plus set `R2_*` Actions secrets (Day 1).
+1. Cloudflare account: create the R2 bucket (`wrangler r2 bucket create ai247-media`, or change `bucket_name` in `worker/wrangler.toml`). The Day 1 uploader must follow `docs/R2_LAYOUT.md` (root channel manifest + `bulletins/<ts>/` segments, manifest last), or set `PREFIX` to one bulletin, plus set `R2_*` Actions secrets (Day 1).
 2. `cd worker && npm ci && npx wrangler login && npx wrangler deploy` (or add a `CLOUDFLARE_API_TOKEN` + account id as repo secrets and a deploy workflow; I did not add one because it needs repo secret/settings changes and `.github/` is out of scope).
 3. Optionally set `EPOCH` (unix seconds) or put `epoch` in the manifest; never change it after launch or the live edge jumps.
 4. Add a custom domain/route if wanted; point the Day 3 Pages player at `https://<worker>/live.m3u8`.
-5. Optional: add `worker/` tests to CI (`.github/workflows/ci.yml`, a job with `actions/setup-node`, `npm ci`, `npm test` in `worker/`). Not done: outside the allowed paths.
+5. Worker tests run in CI (job `worker-site-e2e`).

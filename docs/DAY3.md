@@ -32,3 +32,5 @@ Seen working in Chrome: AI-GENERATED badge, disclosure, offline overlay (no `str
 3. The Worker/R2 responses for the playlist and segments need `Access-Control-Allow-Origin` for the Pages origin (or `*`), since hls.js fetches them with XHR.
 4. Optional: add a CSP header (`script-src 'self' https://cdn.jsdelivr.net`) via a Pages `_headers` file (not supported by the stopgap worker; set it in the worker response instead).
 5. Optionally run `e2e.js` against the real Day 0 artifact and in Safari/Firefox before announcing.
+
+**Update:** `site/test/e2e-worker.js` now runs the page against the real Worker under `wrangler dev --local` (cross-origin `?src=`): playback, CORS and `video/mp2t` verified; runs in CI (`worker-site-e2e`).
