@@ -228,6 +228,7 @@ def test_first_publish_without_slate_loops_the_bulletin(tmp_path):
     summary = publish.publish(out, s3, "bkt", now=NOW1)
     root = json.loads(s3.objects["manifest.json"][0])
     assert root["loop_from"] == 0 and [b["kind"] for b in root["blocks"]] == ["bulletin"] and summary["last_key"] == "manifest.json"
+    assert summary["fresh_minutes"] == summary["rendered_minutes"] == 0.4  # 4 x 6 s: counted from the fresh blocks, not blocks[:loop_from]
 
 
 def test_replay_cap_is_six_blocks(tmp_path):
