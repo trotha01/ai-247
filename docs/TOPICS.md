@@ -72,6 +72,10 @@ at low effort, writer and checker stay on Claude Haiku 5.5.
 - Database `ai247-history` (D1), schema in `worker/migrations/0001_history.sql`: `episodes` (one row per run, the
   full history entry as JSON plus topic/ts/mode/published/r2_prefix/cost/model columns), `stories` (run_id, url,
   source, headline), `claims` (run_id, sha256-16 of every aired sentence). All statements are `IF NOT EXISTS`.
+- **Secrets stay out of the render step**: the render job's step "Load episode history" (`python -m newsbot.topics load
+  out1/history_in.json`) is the only step there with Cloudflare/R2 credentials; it writes a hand-off file (episodes,
+  store status, D1 discovered topics) that the render step reads through `NEWSBOT_HISTORY_IN`. Writes happen in the
+  separate `record` job, and only its final commit step sees the repository write token.
 - **Write/read path from Actions**: `newsbot/history_db.py` calls the Cloudflare REST API
   (`/accounts/<id>/d1/database/<uuid>/query` with bound parameters) using `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`, looks the database up by name and creates it if missing, runs the migration file

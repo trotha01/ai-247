@@ -28,6 +28,9 @@ TOPICS_PATH = Path(os.environ.get("NEWSBOT_TOPICS", "topics/topics.json"))
 HISTORY_PATH = Path(os.environ["NEWSBOT_HISTORY"]) if os.environ.get("NEWSBOT_HISTORY") else None
 HISTORY_KEY = "episodes/history.json"          # R2 mirror of the history: read cache / fallback when D1 is unavailable
 HISTORY_STATUS: dict = {"backend": "none", "note": "", "needs_you": None, "r2_read_ok": False}
+# Read-only hand-off: the workflow's "Load episode history" step (the only render-job step with Cloudflare/R2 secrets)
+# writes this file with `python -m newsbot.topics load <path>`; the render step then reads it and holds no secrets.
+HISTORY_IN = Path(os.environ["NEWSBOT_HISTORY_IN"]) if os.environ.get("NEWSBOT_HISTORY_IN") else None
 MAX_FETCH = int(os.environ.get("NEWSBOT_MAX_FETCH", str(research.MAX_FETCH)))
 SOURCE_CHARS = int(os.environ.get("NEWSBOT_TOPIC_SOURCE_CHARS", str(research.MAX_CHARS)))
 MAX_LEADS = 3            # HN leads (no feed text) fetched before ranking so they can compete
@@ -53,7 +56,13 @@ def load_topics(path: Path = TOPICS_PATH) -> dict:
         cfg["settings"].setdefault(k, v)   # mirrored to the top level for the scoring code
         cfg[k] = cfg["settings"][k]
     cfg["settings"].pop("max_new_topics_per_day", None)   # removed 2026-11-06: no cap on new areas per day
-    if not HISTORY_PATH and history_db.configured():    # discovered topics kept in D1 (the push of topics.json can fail on main)
+    if not HISTORY_PATH and HISTORY_IN and HISTORY_IN.exists():   # hand-off file from the load step (no secrets here)
+        have = {t["id"] for t in cfg["topics"]}
+        extra = [t for t in json.loads(HISTORY_IN.read_text()).get("discovered_topics", []) if t.get("id") not in have]
+        if extra:
+            cfg["topics"] += extra
+            cfg["from_d1"] = [t["id"] for t in extra]
+    elif not HISTORY_PATH and history_db.configured():    # discovered topics kept in D1 (the push of topics.json can fail on main)
         try:
             db = _d1()
             have = {t["id"] for t in cfg["topics"]}
@@ -96,6 +105,10 @@ def load_history(path: Path | None = None, merge_r2: bool = False) -> dict:
     path = HISTORY_PATH if path is None else path
     h = {"version": 1, "episodes": []}
     HISTORY_STATUS.update(backend="none", note="", needs_you=None, r2_read_ok=False)
+    if not path and HISTORY_IN and HISTORY_IN.exists():           # the load step already did the D1/R2 reads
+        d = json.loads(HISTORY_IN.read_text())
+        HISTORY_STATUS.update({k: v for k, v in (d.get("status") or {}).items() if k in HISTORY_STATUS})
+        return {"version": 1, "episodes": sorted(d.get("episodes", []), key=lambda e: e.get("ts", ""))}
     if path:                                   # tests / fixture runs: a local file is the store
         HISTORY_STATUS["backend"] = "file"
         if Path(path).exists():
@@ -484,10 +497,31 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
     return result
 
 
+def load_for_render(path: Path) -> dict:
+    """`python -m newsbot.topics load out1/history_in.json`: read D1 (+ R2 mirror) and the D1 discovered topics once,
+    with the Cloudflare/R2 secrets, and write a plain file for the render step (which then needs no secrets)."""
+    h = load_history(merge_r2=True)
+    disc = []
+    db = _d1() if not HISTORY_PATH else None
+    if db is not None:
+        try:
+            disc = db.load_topics()
+        except history_db.D1Unavailable as e:
+            print(f"topics: D1 discovered topics unavailable ({e})")
+    doc = {"version": 1, "episodes": h["episodes"], "status": dict(HISTORY_STATUS), "discovered_topics": disc}
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    print(f"history hand-off: {len(doc['episodes'])} episodes, {len(disc)} discovered topics, backend {HISTORY_STATUS['backend']} -> {path}")
+    return doc
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["record"]:
         record(Path(argv[1] if len(argv) > 1 else "out1"))
+        return 0
+    if argv[:1] == ["load"]:
+        load_for_render(Path(argv[1] if len(argv) > 1 else "out1/history_in.json"))
         return 0
     print(__doc__)
     return 2

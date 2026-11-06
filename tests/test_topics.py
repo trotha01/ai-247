@@ -261,6 +261,25 @@ def test_r2_mirror_is_not_overwritten_when_its_read_failed(tmp_path, monkeypatch
     assert r["r2_mirror"] is True and writes == [5]   # 3 mirrored + run local-a from the local file + run 9
 
 
+def test_history_hand_off_file_is_the_only_source_for_the_render_step(tmp_path, monkeypatch):
+    """The load step writes history_in.json with the secrets; the render step reads it and touches no store."""
+    monkeypatch.setattr(topics, "HISTORY_PATH", None)
+    monkeypatch.setattr(topics, "HISTORY_IN", tmp_path / "history_in.json")
+    monkeypatch.setattr(topics.history_db, "configured", lambda: True)
+    monkeypatch.setattr(topics, "_d1", lambda: (_ for _ in ()).throw(AssertionError("render step must not touch D1")))
+    monkeypatch.setattr(topics.r2, "r2_configured", lambda: True)
+    monkeypatch.setattr(topics, "history_from_r2", lambda s3=None: (_ for _ in ()).throw(AssertionError("render step must not touch R2")))
+    doc = {"version": 1, "episodes": [ep("7", "ai-vfx", "2026-11-06T10:00:00Z", ["https://example.com/vfx/0"])],
+           "status": {"backend": "d1", "note": "", "needs_you": None, "r2_read_ok": True},
+           "discovered_topics": [{"id": "robot-world-models", "name": "World models for robotics", "lane": "discovered", "keywords": ["world model"], "added": "2026-11-06"}]}
+    (tmp_path / "history_in.json").write_text(json.dumps(doc))
+    h = topics.load_history(merge_r2=True)
+    assert [e["run_id"] for e in h["episodes"]] == ["7"] and topics.HISTORY_STATUS["backend"] == "d1" and topics.HISTORY_STATUS["r2_read_ok"] is True
+    c = topics.load_topics("topics/topics.json")
+    assert c["topics"][-1]["id"] == "robot-world-models" and c["from_d1"] == ["robot-world-models"]
+    assert "https://example.com/vfx/0" in topics.covered_urls(h)
+
+
 def test_safe_name_strips_markup_and_caps_length():
     assert topics.safe_name("Robots <b>now</b> & \"world models\"\n" + "x" * 100) == ("Robots bnow/b & world modelsx" + "x" * 31)[:60]
     assert topics.safe_name("AI for VFX and film and video production") == "AI for VFX and film and video production"

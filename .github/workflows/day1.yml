@@ -112,6 +112,20 @@ jobs:
           done
           ls replays || true
 
+      - name: "Load episode history (read-only: D1, R2 mirror, D1 discovered topics) into a hand-off file"
+        # The only render-job step that sees Cloudflare/R2 credentials. It writes out1/history_in.json, which the
+        # render step reads, so the step that parses third-party pages and model output holds no secrets but the
+        # Claude key (docs/TOPICS.md "Persistence"). Best effort: without secrets the file says backend none.
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m newsbot.topics load out1/history_in.json
+
       - name: Render episode (hard limit 25 minutes)
         timeout-minutes: 25
         env:
@@ -126,15 +140,8 @@ jobs:
           NEWSBOT_PLAN_MODEL: ${{ inputs.plan_model || 'claude-fable-5-1' }}
           NEWSBOT_DISCOVERY_MODEL: ${{ inputs.plan_model || 'claude-fable-5-1' }}
           NEWSBOT_MAX_RUN_USD: ${{ vars.NEWSBOT_MAX_RUN_USD || '0.75' }}
-          # Episode history store (Cloudflare D1 via the REST API; R2 mirror as fallback). Empty when unset: the run
-          # then reads/writes only the R2 mirror and the job summary says so.
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Read-only use here: the R2 mirror of the history is the fallback read cache when D1 is unavailable.
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # Episode history comes from the hand-off file written by the step above: no Cloudflare/R2 secrets here.
+          NEWSBOT_HISTORY_IN: out1/history_in.json
         run: |
           start=$SECONDS
           replay=""
@@ -212,11 +219,11 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n episode-day1 -D out1
           ls out1 out1/episode | head -30
-      - name: Record the episode in D1 (history) and commit a discovered topic back to topics.json
+      - name: Record the episode in D1 (history) and apply a discovered topic to topics.json
         # Dedupe memory for the next run (docs/TOPICS.md "Persistence"): the episode goes to Cloudflare D1 through the
-        # REST API (R2 mirror episodes/history.json kept as a read cache); nothing about history is committed. Only a
-        # topic the discovery lane added is committed (topics/topics.json, Trevor's editable list). A push by
-        # GITHUB_TOKEN triggers no other workflow. Never force-pushes.
+        # REST API (R2 mirror episodes/history.json kept as a read cache); nothing about history is committed. A topic
+        # the discovery lane added is written to D1 (discovered_topics) and appended to topics/topics.json for the
+        # commit step below (Trevor's editable list). A push by GITHUB_TOKEN triggers no other workflow. Never force-pushes.
         timeout-minutes: 5
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -225,9 +232,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python -m newsbot.topics record out1
+
+      - name: Commit a discovered topic back to topics.json (only this step sees the write token)
+        timeout-minutes: 3
+        env:
           GH_PUSH_TOKEN: ${{ github.token }}
         run: |
-          python -m newsbot.topics record out1
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add topics/topics.json
