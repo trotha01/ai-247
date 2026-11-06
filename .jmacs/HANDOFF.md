@@ -19,4 +19,4 @@ AI-247 merge PR #19 (streamUrl) and PR #20 (replay-pool failover) and verify tha
 - No revert needed: the live stream is healthy after the failover deploy.
 
 ## Next step
-Merge this branch's `.jmacs/` update to main (PR, after CI), then done.
+None. PR #23 (this handoff) merged to main as dabb881 after CI (tests + worker-site-e2e green). Only Trevor's two manual items above remain.

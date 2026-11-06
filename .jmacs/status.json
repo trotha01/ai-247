@@ -1,1 +1,1 @@
-{"state": "running", "msg": "PR #19 and #20 merged (by their workers) and deployed green; plain https://ai-247.pages.dev/ plays in headless Chromium (currentTime 12.5->36.5s, no errors); Worker healthy on live-manifest after failover deploy; opening PR for .jmacs update"}
+{"state": "done", "msg": "PR #19/#20 merged+deployed green; plain https://ai-247.pages.dev/ plays (headless Chromium, no errors); Worker healthy on live-manifest; PR #23 (.jmacs) merged dabb881. Trevor: run replay-pool workflow once so pool/manifest.json exists"}
