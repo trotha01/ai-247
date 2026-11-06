@@ -19,10 +19,16 @@ cd site/test && NODE_PATH=$(npm root -g) node e2e.js OUT path/to/hls.min.js
 
 **Caveat**: the real `bulletin-day0` artifact (run 42187611180) could not be downloaded from the cloud session (the blob host `productionresultssa4.blob.core.windows.net` is blocked, as is jsDelivr). The tests used ten 6 s segments made with ffmpeg to the same spec (H.264 720p30, 2 s closed GOP, AAC 48 kHz mono, `independent_segments`), not the real bulletin. To re-run on the real one: download and unzip the artifact and pass that directory to `e2e.js`. Not tested: Safari/Firefox, the live CDN fetch, Day 2 Worker CORS.
 
-## What Trevor must do to deploy (nothing below was done)
+## Deployment status (as of 2026-11-06)
 
-1. Cloudflare dashboard -> Workers & Pages -> create a Pages project connected to `trotha01/ai-247`, production branch `main`, no build command, output directory `site`. (Or `wrangler pages deploy site`.) Alternatively enable GitHub Pages from a workflow; this repo has none.
-2. Once the Day 2 Worker exists, set `streamUrl` in `site/config.json` to its playlist URL via a PR.
+Deployed to Cloudflare Pages project `ai-247` (https://ai-247.pages.dev) by Claude through the Cloudflare API. This is a **stopgap direct-upload deploy**: Cloudflare's asset-upload endpoint refused the upload token from the cloud session, so the deploy ships a small `_worker.js` (Pages advanced mode) with the five `site/` files embedded as base64 and serves them. It is not connected to GitHub, so **merging to `main` does not update the site**; each change needs a redeploy.
+
+Seen working in Chrome: AI-GENERATED badge, disclosure, offline overlay (no `streamUrl` yet), 8 sources. Live playback is not tested yet.
+
+## Still to do (Trevor)
+
+1. Preferred long-term: in the Cloudflare dashboard, Workers & Pages -> Create -> Pages -> Import an existing Git repository, `trotha01/ai-247`, production branch `main`, no build command, output directory `site`. A direct-upload project cannot be converted to Git, so delete `ai-247` first or use another project name. Then the embedded-files deploy is no longer needed.
+2. Once the Day 2 Worker exists, set `streamUrl` in `site/config.json` to its playlist URL via a PR (and redeploy if still on the stopgap).
 3. The Worker/R2 responses for the playlist and segments need `Access-Control-Allow-Origin` for the Pages origin (or `*`), since hls.js fetches them with XHR.
-4. Optional: add a CSP header (`script-src 'self' https://cdn.jsdelivr.net`) in a Pages `_headers` file.
+4. Optional: add a CSP header (`script-src 'self' https://cdn.jsdelivr.net`) via a Pages `_headers` file (not supported by the stopgap worker; set it in the worker response instead).
 5. Optionally run `e2e.js` against the real Day 0 artifact and in Safari/Firefox before announcing.
