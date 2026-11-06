@@ -17,9 +17,13 @@ AI-247 "fix PR 8 check and test R2 upload": get PR #8 (Day 3 dark-mode link colo
 - day1-episode dispatch 1 of 2: llm=off, run 42212912268 on main (head 31f27fb).
 - PR #8 re-run green (tests + worker-site-e2e); squash-merged to main as 218a784. Part A complete.
 
+- Run 42212912268 (llm=off) green: Publish step wrote bulletins/20261106T115430Z/seg_000..099.ts (video/mp2t), the block manifest, slate/slate_000..004.ts + manifest, then root manifest.json last; 108 objects, 34,139,323 bytes, 116 s; cycle_start_k 161021, epoch 1793000000, no prev.
+- Dispatch 2 of 2: llm=on, run 42214045472 (running).
+- docs/PLAN.md section "R2 upload verified" drafted on this branch (run 2 lines still placeholders).
+
 ## Pending
-- day1-episode dispatch 2 of 2 (llm=on) after run 42212912268 finishes; confirm keys and the root manifest in both logs.
+- Fill in run 42214045472 results, open the docs PR, merge after ci, status done.
 - "R2 upload verified" note in docs/PLAN.md via PR from this branch; merge after ci; status done.
 
 ## Next step
-Wait for run 42212912268, then dispatch llm=on.
+Wait for run 42214045472, fill in PLAN.md, PR, merge.
