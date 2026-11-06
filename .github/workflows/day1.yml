@@ -139,6 +139,11 @@ jobs:
           # then reads/writes only the R2 mirror and the job summary says so.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Read-only use here: the R2 mirror of the history is the fallback read cache when D1 is unavailable.
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           start=$SECONDS
           replay=""
@@ -191,6 +196,7 @@ jobs:
             if git pull -q --rebase "$remote" "$GITHUB_REF_NAME" && git push -q "$remote" "HEAD:$GITHUB_REF_NAME"; then
               echo "topics.json pushed to $GITHUB_REF_NAME"; exit 0
             fi
+            git rebase --abort 2>/dev/null || true   # a conflicted rebase must not poison the next attempt
             echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
           done
           echo "::warning::topics.json push failed; the new topic is in the artifact (out1/episode/topic_pick.json)"

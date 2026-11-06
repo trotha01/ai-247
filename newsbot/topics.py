@@ -314,6 +314,11 @@ def plan_call(client, meter, topic: dict, items, max_stories: int = MAX_STORIES)
 
 
 # ---------------------------------------------------------------- the stage
+def safe_name(name: str) -> str:
+    """A topic name for the title card: plain printable text, at most 60 characters (discovered names come from the LLM)."""
+    return re.sub(r"[^A-Za-z0-9 ,.&'/+:()-]", "", str(name)).strip()[:60]
+
+
 def research_stage(items, reports, now, client, meter, ep: Path, log=print) -> dict:
     """Topic mode: pick -> read sources -> plan -> discovery. Returns a dict with `ranked` (None = fall back to the
     general rundown), `counts`, `script_extra`, and everything logged to episode/topic_pick.json."""
@@ -358,7 +363,7 @@ def research_stage(items, reports, now, client, meter, ep: Path, log=print) -> d
                 log(f"plan call failed: {type(e).__name__}")
                 info["plan"] = {"error": type(e).__name__}
         ranked, counts = order, sm.source_counts(titems)
-        extra_script = {"topic": info["topic"], "rundown_title": f"In this episode: {topic['name']}"}
+        extra_script = {"topic": info["topic"], "rundown_title": f"In this episode: {safe_name(topic['name'])}"}
         if intro:
             extra_script["intro"] = intro + " This episode is A I generated. Every sentence shows the source it came from."
     (ep / "topic_pick.json").write_text(json.dumps(info, indent=1, ensure_ascii=False))
