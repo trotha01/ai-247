@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #26 open (pr-review workflow, ruleset JSON, CONTRIBUTING); waiting for ci, then merge, apply ruleset, proof PR"}
+{"state":"running","msg":"PR #26 merged (pr-review workflow live on main); ruleset write refused by the session proxy (Trevor: gh api -X POST repos/trotha01/ai-247/rulesets --input .github/rulesets/main.json); proof PR #27 running"}
