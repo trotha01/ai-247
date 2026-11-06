@@ -12,7 +12,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30   # install up to 20 (see below) + tests
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -22,8 +22,9 @@ jobs:
       - name: Install
         # Same stall guard as day1/hourly: this step hung >10 min on run 42208590694 (no output inside pip install -q)
         # and timed out at 8 min on 2026-11-06 (runs 42244948815, 42255636564: slow apt mirror, then pip silent).
-        # Each stage is bounded (apt 120 s, pip 200 s with a 20 s socket timeout) so a second attempt always fits.
-        timeout-minutes: 15
+        # Each stage is bounded (apt 120 s x 3, pip 200 s with a 20 s socket timeout: 9.3 min worst case per attempt),
+        # so 20 minutes always allows a second attempt.
+        timeout-minutes: 20
         run: |
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
@@ -44,7 +45,7 @@ jobs:
     # Worker unit + wrangler-dev tests, real-uploader -> local R2 -> Worker layout test, and the browser e2e of
     # site/ against the Worker (cross-origin, so it proves CORS). No secrets, no deploy, no network to Cloudflare.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35   # install up to 20 (see below) + Worker tests + browser e2e
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
@@ -57,9 +58,10 @@ jobs:
           python-version: "3.12"
       - name: Install
         # Timed out at 8 min with no output on 2026-11-06 (runs 42244338297, 42255636564) before any test ran: a
-        # download stall in npm or the Playwright browser install. Every stage is bounded and the whole thing is
-        # retried, like the Python install steps.
-        timeout-minutes: 15
+        # download stall in npm or the Playwright browser install. Every stage is bounded (apt 120 s x 2, npm 180 s x 2,
+        # Playwright 240 s: 14 min worst case per attempt) and the whole thing is retried, like the Python install steps;
+        # 20 minutes covers one worst-case attempt plus a normal one.
+        timeout-minutes: 20
         run: |
           for attempt in 1 2 3; do
             t0=$SECONDS

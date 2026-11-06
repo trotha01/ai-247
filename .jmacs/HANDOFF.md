@@ -13,9 +13,11 @@ AI-247: hourly cadence with >= 60 min of new footage per run (Trevor's rule: pro
 - Branch restarted from main for PR 2.
 
 ## Pending
-- Verification run: hourly-bulletins dispatched on main at 16:26Z (6 slices, HOURLY_LLM_SLICES default 1). Check: plan job slices, 6 renders green, stitch publish.json rendered_minutes >= 60, `/healthz` manifest.uploaded after 16:26Z with loop_from blocks, pages.dev plays the new bulletins at the swap (legacy cur manifest: swap waits for its loop boundary, at most ~40 min).
-- Cron proof: the 16:23Z slot produced no run (file on main since 15:47Z). Watch the 17:23Z slot; record in PLAN.md either way.
-- PR 2: PLAN.md "Verification run" filled (timings, cost, novelty counts), fresh_minutes cosmetic note, HANDOFF.
+- Run 3 (42256733605, install fix): all 6 installs 35-46 s, 6 renders in progress since 16:58Z; publish expected ~17:10Z. Fill PLAN.md "Run 3", push, merge PR #34 (tests, worker-site-e2e, claude-review were green on 9a27c2e), status done.
+- Cron proof: 16:23Z slot produced no run; watch 17:23Z (hourly.yml has been on main since 15:47Z).
+
+## Done since PR #33
+- Verification run 1 (main): 2 of 6 bulletins published (3 failed the Day 1 floor of 10 stories with 9, 1 install stall); swap at 16:51:26Z verified on pages.dev. Run 2 (branch, floor 6): 3 of 6 (3 install stalls); swap landed exactly at run 1's fresh end (164181). Fixes on the branch: NEWSBOT_MIN_STORIES (6 for slices), install steps bounded per stage with fast-failing pip and 20-minute budgets in hourly.yml and ci.yml, vitest 30 s per-test timeout for the wrangler dev suites, fresh_minutes with inherited blocks, merge of main (PR #29 topic stage) with the topic test restored.
 
 ## Next step
-Wait for run completion (~25 min), verify, write PLAN.md, PR 2, merge, status done.
+When run 3 publishes: read its stitch log (PUBLISH line, rendered_minutes), write PLAN.md "Run 3", push, wait for the three checks, squash-merge PR #34, set status done (or note the shortfall honestly if run 3 is below 60 min).
