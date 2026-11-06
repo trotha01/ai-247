@@ -1,1 +1,1 @@
-{"state":"running","msg":"Both day1 runs published to R2 (42212912268 llm=off: 108 objects 34.1 MB; 42214045472 llm=on: 108 objects 33.5 MB, chained onto run 1 at cycle_start_k 161231). Docs PR with the PLAN.md note opening; done after it merges"}
+{"state":"running","msg":"Confirmed /healthz pool.problem=missing; dispatched replay-pool (source=r2, max_blocks=2) on main; branch cloud/ai247-pool started, implementing daily cron + guard + MAX_MANIFEST_AGE_S next"}
