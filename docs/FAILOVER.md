@@ -85,7 +85,14 @@ The refresh (`--from-r2 --upload`) never replaces a good `pool/manifest.json` wi
 - No complete episode at all: the run exits 3 and writes nothing (the existing pool stays).
 - The new manifest would have nothing playable (no segments, or a duration <= 0): not uploaded, the existing pool stays. (`build_pool_manifest` refuses an empty pool anyway.)
 - The newest episodes are exactly the ones the pool already lists: no PutObject (the run says `not uploading: unchanged`), so a daily run with no new episode does not touch R2. `--force` (workflow input `force`) rewrites it anyway.
+- Fewer than `--min-segments` segments (the workflow passes 10: a Day 0 bulletin is 10, an episode 100): exit 3, R2 untouched.
+- The existing pool is read back and every segment it references is HEAD-checked (`verify_pool`). If it still verifies and loops a *newer* episode than the candidate (the newest upload is truncated, so `--from-r2` fell back to an older one), it is kept (`--force` overrides). If it points at a missing or truncated object, it is replaced by whatever complete episode exists, even an older one.
 - A missing or non-JSON pool manifest in R2 is replaced.
+- A skipped run writes the pool that stays live to `--write`, so the job summary and the `replay-pool-manifest` artifact always show what the Worker serves.
+
+### Verification (`scripts/pool_check.py`)
+
+After the publish step the workflow runs `python scripts/pool_check.py --manifest pool-manifest.json --wait 150`: it HEADs `pool/manifest.json` in R2, re-verifies every referenced segment, checks that the R2 copy lists the same segment keys as the local manifest, then polls the live Worker's `/healthz` (URL from the repo variable `WORKER_URL`, else the host of `streamUrl` in `site/config.json`) until `pool.ok` is true with this run's `built_at` (the Worker's pool cache is 60 s). An unusable pool fails the job; a usable pool with another `built_at` (another isolate) is only a warning. The last `/healthz` body goes into the job summary and the artifact (`healthz.json`). Without the `R2_*` secrets the whole job is a warning and exit 0. The script also runs by hand with the `R2_*` env and `--url`.
 
 Seeded on 2026-11-06 by run 42222599138 (`source=r2`, `max_blocks=2`, 51 s): `pool/manifest.json` = 2 blocks, 200 segments, built from `bulletins/20261106T120928Z/` and `bulletins/20261106T115430Z/`; `/healthz` on `ai247-live` went from `pool.problem: "missing: pool/manifest.json is not in the bucket"` to `pool.ok: true` while `source` stayed `live-manifest`.
 
