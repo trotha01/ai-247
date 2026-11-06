@@ -9,7 +9,7 @@ AI-247 Day 3 Player: static player in site/ (hls.js pinned CDN, AI-GENERATED lab
 - Real bulletin-day0 artifact was not downloadable (blob host blocked); stand-in segments used. `kb` and ~/org do not exist in this sandbox.
 
 ## Pending
-- PR from cloud/ai247-d3, wait for checks, merge to main.
+- None. PR #6 merged to main (squash, CI green).
 
 ## Next step
-Merge PR; Trevor does the Pages deploy steps in docs/DAY3.md.
+Trevor does the Pages deploy steps in docs/DAY3.md.

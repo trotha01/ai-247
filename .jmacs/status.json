@@ -1,1 +1,1 @@
-{"state":"running","msg":"Day 3 player built and e2e-tested locally; opening PR to main"}
+{"state":"done","msg":"Day 3 player merged to main (PR #6, CI green). Real Day 0 artifact was not downloadable; tested with same-spec ffmpeg segments. Trevor: see docs/DAY3.md for Pages deploy steps."}
