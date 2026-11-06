@@ -15,4 +15,4 @@ AI-247: hourly cadence with >= 60 min of new footage per run (Trevor's rule: pro
 - Cron proof: the first `23 * * * *` slot after merge (no schedule run has ever been observed on this repo; the cron worker's HANDOFF concluded nothing in the repo blocks it).
 
 ## Next step
-Open PR 1, watch checks, merge, dispatch, verify, PR 2.
+PR #33 is open; wait for ci + worker-site-e2e + claude-review, squash-merge, dispatch hourly-bulletins on main, verify, PR 2.

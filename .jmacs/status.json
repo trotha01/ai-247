@@ -1,1 +1,1 @@
-{"state":"running","msg":"Implemented hourly.yml (cron 23 * * * *, plan -> 6-slice render matrix -> stitch), newsbot/hourly.py planner, publish_many with loop_from, Worker fresh-first swap math (JS + Python, 99 worker + 60 python tests green). Opening PR 1; dispatch + verification after merge."}
+{"state":"waiting","msg":"PR #33 open (hourly cadence: 6 parallel 10-min bulletins per run, fresh-first playlist with loop_from, cost ~0.12 USD/day at 1 Haiku slice). Waiting for ci + worker-site-e2e + claude-review, then squash-merge, dispatch hourly-bulletins on main and verify."}
