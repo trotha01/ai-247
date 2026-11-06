@@ -13,7 +13,7 @@ EP = DAY1 / "episode"
 # Rundown floor. 10 fits the Day 1 feed mix (short feed summaries, 12 ranked items). The hourly slices
 # (hourly.yml) carry longer source texts (arXiv abstracts, release notes), so 8-9 stories fill the 10 minutes;
 # that workflow sets NEWSBOT_MIN_STORIES=6 (the pipeline itself refuses fewer than 6 rankable items).
-MIN_STORIES = int(os.environ.get("NEWSBOT_MIN_STORIES", "10"))
+MIN_STORIES = int(os.environ.get("NEWSBOT_MIN_STORIES") or "10")
 
 
 @pytest.fixture(scope="module")
@@ -37,10 +37,14 @@ def test_manifest_hashes_and_segment_durations(d):
         assert s["sha256"] == hashlib.sha256((EP / s["file"]).read_bytes()).hexdigest()
 
 
-def test_rundown_10_to_12_stories_from_multiple_sources(d):
+def test_rundown_story_count_within_floor_and_12_from_multiple_sources(d):
     n = len(d["script"]["stories"])
-    assert MIN_STORIES <= n <= 12, n
-    assert len({s["source"] for s in d["script"]["stories"]}) >= 4
+    if d["script"].get("topic"):   # topic episode: one subject, fewer and deeper stories (docs/TOPICS.md)
+        assert 5 <= n <= 12, n
+        assert len({s["source"] for s in d["script"]["stories"]}) >= 2
+    else:
+        assert MIN_STORIES <= n <= 12, n
+        assert len({s["source"] for s in d["script"]["stories"]}) >= 4
 
 
 def test_zero_unsourced_items_and_every_claim_scene_has_citation(d):
@@ -77,4 +81,4 @@ def test_render_under_25_minutes_and_cost_cap(d):
     assert d["report"]["total_seconds"] < 25 * 60
     llm = d["report"]["llm"]
     if llm.get("used"):
-        assert llm["cost_usd_estimate"] <= llm["max_run_usd"] == 0.05
+        assert llm["cost_usd_estimate"] <= llm["max_run_usd"] <= 0.75

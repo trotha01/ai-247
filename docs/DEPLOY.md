@@ -15,7 +15,7 @@ The smoke test fails the job if `/healthz` is not ok (plain `ok` or JSON `"ok": 
 
 ## Required secrets (repository secrets, names only)
 
-- `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, Cloudflare Pages: Edit, Account Settings: Read). The first run (42211838846) failed `pages deploy` with `Authentication error [code: 10000]` on `/accounts/<id>/pages/projects/ai-247`: the current token lacks the Pages: Edit permission (or the project lives in another account). Fix the token, then re-run the workflow.
+- `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit, Cloudflare Pages: Edit, Account Settings: Read, **and Account -> D1 -> Edit** for the episode-history database `ai247-history`, see `docs/TOPICS.md` "Persistence"; without D1: Edit the deploy warns and deploys the Worker without the history binding, and the day1 job falls back to the R2 history mirror). The first run (42211838846) failed `pages deploy` with `Authentication error [code: 10000]` on `/accounts/<id>/pages/projects/ai-247`: the current token lacks the Pages: Edit permission (or the project lives in another account). Fix the token, then re-run the workflow.
 - `CLOUDFLARE_ACCOUNT_ID`
 
 If either is missing the deploy jobs print a warning and exit successfully (no-op), so merging never breaks `main`. Add the secrets and re-run the workflow.

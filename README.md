@@ -14,6 +14,8 @@ A code-made, 24/7 AI news channel. Bulletins and graphics are rendered by code f
 4. A Cloudflare Pages page plays the stream with hls.js.
 5. Replays and a pre-rendered bootstrap pool keep the channel from going dark.
 6. Every segment is labelled as AI-generated, and every claim cites its source.
+7. Each episode researches one topic (`topics/topics.json`, editable; `docs/TOPICS.md`) from primary sources and
+   skips topics and stories already in the episode history (Cloudflare D1, R2 mirror as fallback) unless there is new news.
 
 ## Plan
 
