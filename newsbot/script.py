@@ -125,3 +125,79 @@ def check_story(story: dict) -> list[str]:
 
 def check_script(script: dict) -> dict[int, list[str]]:
     return {i: m for i, s in enumerate(script["stories"]) if (m := check_story(s))}
+
+
+# ---- Day 1: multi-sentence stories --------------------------------------------------
+MAX_SENT_WORDS = 32
+MAX_STORY_SENTENCES = 5
+MAX_STORY_WORDS = 120
+
+
+def split_sentences(text: str) -> list[str]:
+    """Sentence splitting with pysbd (maintained rule-based segmenter); regex fallback if absent."""
+    try:
+        import pysbd
+        seg = pysbd.Segmenter(language="en", clean=False)
+        return [s.strip() for s in seg.segment(text) if s.strip()]
+    except Exception:
+        return sentences(text)
+
+
+def extractive_sentences(item, max_sentences: int = MAX_STORY_SENTENCES) -> list[str]:
+    """Verbatim sentences of the feed summary (clipped at a word boundary), skipping boilerplate."""
+    out, total = [], 0
+    for s in split_sentences(item.summary):
+        w = words(s)
+        if len(w) < 5 or _BAD_SENT.match(s):
+            continue
+        if len(w) > MAX_SENT_WORDS:
+            s = " ".join(w[:MAX_SENT_WORDS]).rstrip(",;:") + "..."
+            w = words(s)
+        if total + len(w) > MAX_STORY_WORDS:
+            break
+        out.append(s)
+        total += len(w)
+        if len(out) >= max_sentences:
+            break
+    return out
+
+
+def make_story(item, sentence_texts, headline=None, flags=None) -> dict:
+    """Day 1 story: every sentence is a dict so the fact check result travels with it."""
+    flags = flags or [{}] * len(sentence_texts)
+    return {
+        "source": item.source, "url": item.url, "published": item.published,
+        "headline": headline or item.title,
+        "sentences": [{"text": t, **f} for t, f in zip(sentence_texts, flags)],
+        "source_text": f"{item.title}. {item.summary}",
+    }
+
+
+def extractive_story(item) -> dict:
+    texts = extractive_sentences(item)
+    return make_story(item, texts, flags=[{"supported": True, "method": "verbatim"} for _ in texts])
+
+
+def sentence_problems(text: str, source_text: str) -> list[str]:
+    """Deterministic grounding gate (numbers / named entities not in the source)."""
+    return missing_terms(text.replace("...", " "), source_text)
+
+
+def story_problems(story: dict) -> dict:
+    out = {"headline": missing_terms(story["headline"], story["source_text"])}
+    for i, s in enumerate(story["sentences"]):
+        out[i] = sentence_problems(s["text"], story["source_text"])
+    return {k: v for k, v in out.items() if v}
+
+
+def build_episode_script(stories, counts, generated_by: str, extra: dict | None = None) -> dict:
+    d = {
+        "generated_by": generated_by,
+        "chart": {"title": "Items fetched per source", "data": counts,
+                  "source": "Feeds listed on the source cards; fetched at render time"},
+        "intro": "Welcome to the A I news channel. This episode is A I generated. Every sentence shows the source it came from.",
+        "outro": "That is the end of this episode. Every item shows its source, and links are in the description.",
+        "stories": stories,
+    }
+    d.update(extra or {})
+    return d

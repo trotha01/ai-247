@@ -1,1 +1,1 @@
-{"state":"waiting","todo_state":"needs_you","msg":"Day 0 done: 60 s bulletin (10x6 s segments + manifest) rendered on runner in 61 s pipeline, 25/25 tests pass. Needs Trevor: watch clip, yes/no, then set secrets."}
+{"state":"running","msg":"Day 1 code done, PR #3 open (units+seam 50 pass locally, 600.0 s local render, A/V drift 21 ms). Waiting on CI, then merge, then Actions runs (extractive + Haiku; key secret confirmed present)."}
