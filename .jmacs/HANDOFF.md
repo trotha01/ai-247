@@ -16,6 +16,25 @@ AI-247: make the GitHub Actions episode cron (`day1-episode`, `23 */3 * * *`) fi
 - PR #25 (this fix) ci green (run 42223392070), squash-merged to main as 5ab227c at ~13:17Z. Branch restarted from main.
 - Draft PR #14 closed with a comment: superseded by PRs #15/#17 (deploy.yml, smoke.sh, DEPLOY.md); its branch only differs from main in `.jmacs/`.
 
+- Todo triage (jmacs is not installed in the cloud session, so I could not run `jmacs todo list --open` or `jmacs todo done`; the orchestrator/Trevor maps the ids t-675fb31c, t-dd8fda48, t-89a45dda, t-f6d0d35c, t-89a55812, t-e3e3ac7a to the workstreams below and applies the verdicts). Verified from `main` and the Actions/PR history on 2026-11-06:
+
+  | AI-247 workstream (branch) | Evidence on main / Actions | Verdict |
+  |---|---|---|
+  | Day 0 bulletin (`cloud/ai247-day0`, PRs #1 #2) | `day0.yml`, `newsbot/pipeline.py`; runs 42187611180, 42197942314, 42211796435 green (last one with real R2 upload) | work done; its status.json still says `needs_you` (Trevor to watch the clip). Mark done unless Trevor still wants to review it. |
+  | Day 1 episode (`cloud/ai247-day1`, PRs #3 #4 #5 #9 #13) | `day1.yml`, `newsbot/day1.py` etc.; Haiku runs 42203098918, 42210163643, 42214045472 green; PLAN.md "Day 1 run results" | work done; status.json `needs_you` (watch the episode). Same as Day 0. |
+  | Day 2 Worker (`cloud/ai247-d2`, PR #7) + manifest swap (`cloud/ai247-swap`, PR #10) | `worker/src/{index,playlist}.js`, docs/DAY2.md, MANIFEST-SWAP.md; deployed by deploy run 42215042026; `/healthz` ok from this session | done |
+  | Day 3 player (`cloud/ai247-d3`, PR #6; `cloud/ai247-d3-fix`, PR #8) | `site/`, docs/DAY3.md; Pages deploy run 42214640757 green; `ai-247.pages.dev/config.json` 200 | done |
+  | e2e + R2 key layout (`cloud/ai247-e2e`, PR #11) | `worker/test/e2e`, docs/R2_LAYOUT.md, ci job `worker-site-e2e` green on main | done |
+  | Install-step stall (`fix/install-step-timeout`, PR #12; `cloud/redispatch-d1` proposal patch) | PR #12 merged (timeouts + retries in day0/day1/ci); the redispatch-d1 verbose-logging patch was never applied and is superseded by #12 (installs 31-87 s since) | done (proposal superseded; nothing to apply) |
+  | Auto-deploy on merge (`cloud/auto-deploy` PR #15, `cloud/auto-deploy-fix` PR #17, draft PR #14 on `cloud/ai247-deploy`) | `deploy.yml`, `scripts/smoke.sh`, docs/DEPLOY.md on main; deploy runs green for Worker and site; PR #14 closed today as superseded | done |
+  | Day 1 publish to R2 (`cloud/ai247-r2test`, PRs #18 #22) | `newsbot/publish.py`, step "Publish to R2"; runs 42212912268 and 42214045472 wrote 108 objects each; PLAN.md "R2 upload verified" | done |
+  | Go live (`cloud/ai247-golive`, PRs #19 #21) | `site/config.json` streamUrl = Worker playlist; plain pages.dev plays (mergeverify handoff) | done |
+  | Replay-pool failover (`cloud/ai247-failover`, PR #20) | `worker/src/{failover,channel}.js`, `newsbot/replay_pool.py`, `replay-pool.yml`, docs/FAILOVER.md; replay-pool run 42222599138 (13:04Z) succeeded and `/healthz` shows `pool.ok=true` (200 segments / 2 blocks) | done (Trevor's one manual step, running the pool workflow once, has happened) |
+  | Merge-verify (`cloud/ai247-mergeverify`, PR #23) | merged dabb881 | done |
+  | Episode cron unattended (this item, `cloud/ai247-cron`, PR #25) | see above | in progress until the scheduled run is green |
+
+  Left open / unclear: whether Trevor has done the Day 0 / Day 1 "watch it" reviews (not verifiable from the repo); `MAX_MANIFEST_AGE_S` is still `0` in `worker/wrangler.toml` (stale rule reports but never switches to the pool), a decision only Trevor can make.
+
 ## Pending
 - Wait for the 15:23Z scheduled run; verify success, Publish step keys, root manifest in R2 via `/healthz` (`manifest.uploaded` after 15:23Z, blocks 3 with the new bulletin first).
 - Todo triage: jmacs unavailable here; verdicts in the final handoff for the orchestrator to apply.
