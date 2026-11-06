@@ -1,16 +1,18 @@
 # Handoff
 
 ## Objective
-AI-247 "local end-to-end and R2 key layout": run the Worker under wrangler dev --local with seeded R2, serve site/ via ?src=, prove CORS + manifest format + key layout against newsbot/r2.py, reconcile on the Worker side (PREFIX var, .ts content type), document the layout in docs/, add worker tests + site e2e to ci.yml. Do not edit newsbot/. No deploy.
+AI-247 "local end-to-end and R2 key layout" (Worker/site/docs/ci only; newsbot/ untouched; no deploy).
 
 ## Done
-- Search: no `kb` CLI and no ~/org here; read PLAN/DAY2/DAY3, playlist.py, r2.py, site/, workflows. Reused wrangler/miniflare, hls-parser, vitest, Playwright, ffmpeg HLS muxer (existing); wrote no HLS parser.
-- Finding: r2.py uploads to `bulletins/<ts>/<file>` (sorted, so manifest.json lands BEFORE the segments); Worker read manifest at bucket root -> 503.
-- Worker: PREFIX normalised (worker/src/index.js), CORS preflight allows Range, .ts always video/mp2t.
-- worker/test/e2e: real newsbot.r2.upload with a fake S3 -> local R2 -> wrangler dev; 8 tests pass.
+- Search done (no kb/~/org available); reused wrangler/miniflare, vitest, hls-parser, Playwright, ffmpeg; no custom HLS code.
+- Found mismatch: r2.py -> `bulletins/<ts>/<file>`, manifest.json uploaded before segments; Worker read root -> 503.
+- Worker: PREFIX normalised, preflight Range, .ts always video/mp2t. docs/R2_LAYOUT.md has the contract.
+- Tests: worker/test/e2e (real r2.upload -> local R2 -> Worker), site/test/e2e-worker.js (browser, cross-origin, real playback). 56 worker tests pass locally; site e2e passes.
+- ci.yml job `worker-site-e2e` added.
 
 ## Pending
-- Site browser e2e against the Worker (site/test), docs/R2_LAYOUT.md, ci.yml jobs, merge main, PR + merge.
+- PR + CI check + merge to main.
+- Day 1 owner: upload manifest.json LAST (r2.py still sorted-order) and adopt Layout B in docs/R2_LAYOUT.md.
 
 ## Next step
-Write site/test/e2e-worker.js, docs, ci.yml; commit, push, PR, merge.
+Open PR, wait for CI, merge.

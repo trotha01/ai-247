@@ -27,3 +27,33 @@ jobs:
           pip install -q -r requirements.txt
       - name: Tests (no ANTHROPIC_API_KEY in this job)
         run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py
+
+  worker-site-e2e:
+    # Worker unit + wrangler-dev tests, real-uploader -> local R2 -> Worker layout test, and the browser e2e of
+    # site/ against the Worker (cross-origin, so it proves CORS). No secrets, no deploy, no network to Cloudflare.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          npm ci --prefix worker
+          # hls.js at the exact version pinned (with SRI) in site/index.html, and Playwright for the browser test
+          mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
+          npm init -y >/dev/null && npm install --silent hls.js@1.6.15 playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Worker tests (unit, wrangler dev --local, uploader layout e2e)
+        run: npm test --prefix worker
+      - name: Site e2e against the Worker (?src=, cross-origin)
+        run: node site/test/e2e-worker.js "$RUNNER_TEMP/tools/node_modules/hls.js/dist/hls.min.js"
+        env:
+          NODE_PATH: ${{ runner.temp }}/tools/node_modules
