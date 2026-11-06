@@ -1,0 +1,94 @@
+name: day1-episode
+
+# Day 1: render one 10-minute episode as 6 s HLS segments + manifest, plus the slate loop and replay pool.
+# Triggers: manual (workflow_dispatch) and a 3-hourly TEST cron. To stop the cron without a commit, either set the
+# repo variable DAY1_CRON_ENABLED to "false" or run: gh workflow disable day1-episode -R trotha01/ai-247
+on:
+  workflow_dispatch:
+    inputs:
+      tts:
+        description: "Force TTS engine (blank = kokoro with espeak-ng fallback)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", "kokoro", "espeak-ng"]
+  schedule:
+    - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
+
+permissions:
+  contents: read
+  actions: read   # only to fetch earlier episode artifacts for the replay pool
+
+concurrency:
+  group: day1-episode
+  cancel-in-progress: false
+
+jobs:
+  episode:
+    # never on forks; cron can be switched off with the DAY1_CRON_ENABLED variable
+    if: github.repository == 'trotha01/ai-247' && (github.event_name != 'schedule' || vars.DAY1_CRON_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Runner specs
+        run: |
+          echo "nproc: $(nproc)"; free -m | head -2; lscpu | grep -E "Model name"; df -h . | tail -1
+
+      - name: Install system + python deps
+        run: |
+          start=$SECONDS
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
+          command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg
+          pip install -q -r requirements.txt
+          echo "install stage: $((SECONDS-start)) s"
+
+      - uses: actions/cache@v6
+        with:
+          path: models
+          key: kokoro-int8-v1.0
+
+      - name: Fetch earlier episodes for the replay pool (best effort)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p replays
+          ids=$(gh run list -R "$GITHUB_REPOSITORY" --workflow day1-episode.yml --status success --limit 3 --json databaseId -q '.[].databaseId' || true)
+          for id in $ids; do
+            gh run download "$id" -R "$GITHUB_REPOSITORY" -n episode-day1 -D "replays/$id" || echo "no artifact for run $id"
+          done
+          ls replays || true
+
+      - name: Render episode (hard limit 25 minutes)
+        timeout-minutes: 25
+        env:
+          # Secret is empty when unset; it is read by the SDK from the environment and never echoed.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          start=$SECONDS
+          replay=""
+          for d in replays/*/episode; do [ -d "$d" ] && replay="$replay --replay-dir $d"; done
+          python -m newsbot.day1 --out out1 $replay ${{ inputs.tts != '' && format('--tts {0}', inputs.tts) || '' }}
+          echo "pipeline wall-clock: $((SECONDS-start)) s"
+
+      - name: Tests (Day 1 units + seam on the real render)
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py
+
+      - name: Job summary
+        if: always()
+        run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: episode-day1
+          path: out1/
+          retention-days: 14

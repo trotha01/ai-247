@@ -56,12 +56,15 @@ def ease(t: float) -> float:
     return 1 - (1 - t) ** 3
 
 
-def chrome(canvas, scene_t: float, global_frame: int, ticker_text: str):
+LABEL = "AI NEWS 24/7  |  Day 0 test bulletin"
+
+
+def chrome(canvas, scene_t: float, global_frame: int, ticker_text: str, dur: float = 6.0):
     """Elements present on every segment: channel label, AI badge, progress bar, ticker."""
-    text(canvas, "AI NEWS 24/7  |  Day 0 test bulletin", 40, 52, 22, MUTED, True)
+    text(canvas, LABEL, 40, 52, 22, MUTED, True)
     canvas.drawRoundRect(skia.Rect.MakeXYWH(W - 250, 26, 210, 36), 8, 8, paint(WARN))
     text(canvas, "AI-GENERATED", W - 236, 52, 20, INK, True)
-    canvas.drawRect(skia.Rect.MakeXYWH(0, 0, W * scene_t / 6.0, 5), paint(ACCENT))
+    canvas.drawRect(skia.Rect.MakeXYWH(0, 0, W * min(1.0, scene_t / dur), 5), paint(ACCENT))
     # ticker
     canvas.drawRect(skia.Rect.MakeXYWH(0, H - 56, W, 56), paint(0xFF050A14))
     canvas.drawRect(skia.Rect.MakeXYWH(0, H - 56, W, 3), paint(ACCENT))
@@ -133,10 +136,62 @@ def title_card(canvas, scene, t):
         text(canvas, ln, 70, 440 + 42 * k, 30, MUTED, False, a)
 
 
+def sentence_card(canvas, scene, t):
+    """One aired sentence, with its source citation always on screen."""
+    a = ease(t / 0.4)
+    c = scene["citation"]
+    text(canvas, scene["headline"], 60, 125, 26, MUTED, True, a)
+    y = 215
+    for ln in wrap(scene["claims"][0], 44, W - 120, False, 6):
+        text(canvas, ln, 60, y, 44, INK, False, a)
+        y += 58
+    canvas.drawRoundRect(skia.Rect.MakeXYWH(50, H - 190, W - 100, 118), 14, 14, paint(0xFF0F1B33, 0.95))
+    text(canvas, f"SOURCE: {c['source']}  ({c['published'] or 'date n/a'})", 72, H - 150, 26, ACCENT, True, a)
+    for k, ln in enumerate(wrap(c["url"], 21, W - 150, False, 2)):
+        text(canvas, ln, 72, H - 112 + 26 * k, 21, INK, False, a)
+
+
+def source_card(canvas, scene, t):
+    a = ease(t / 0.4)
+    c = scene["citation"]
+    text(canvas, "SOURCE", 60, 150, 26, ACCENT, True, a)
+    text(canvas, c["source"], 60, 230, 64, INK, True, a)
+    text(canvas, f"Published: {c['published'] or 'date n/a'}", 60, 285, 28, MUTED, False, a)
+    for k, ln in enumerate(wrap(c["url"], 26, W - 120, False, 3)):
+        text(canvas, ln, 60, 360 + 36 * k, 26, ACCENT, False, a)
+    text(canvas, scene["headline"], 60, H - 120, 26, MUTED, False, a)
+
+
+def list_card(canvas, scene, t):
+    """Rundown (intro) / recap: numbered headlines with their sources."""
+    a = ease(t / 0.5)
+    text(canvas, scene["title"], 60, 130, 44, INK, True, a)
+    y = 190
+    for i, (src, head) in enumerate(scene["items"]):
+        text(canvas, f"{i + 1}. {head[:62]}  [{src}]", 60, y, 24, INK, False, a)
+        y += 36 if len(scene["items"]) > 10 else 42
+    text(canvas, "Every sentence in this episode shows the source it came from.", 60, H - 85, 20, MUTED, False, a)
+
+
+def standby_card(canvas, scene, t):
+    a = ease(t / 0.5)
+    text(canvas, scene["title"], 70, 300, 60, INK, True, a)
+    for k, ln in enumerate(wrap(scene["subtitle"], 30, W - 140, False, 3)):
+        text(canvas, ln, 70, 380 + 42 * k, 30, MUTED, False, a)
+
+
 def draw_scene(canvas, scene, scene_t: float, global_frame: int, ticker: str):
     background(canvas)
     kind = scene["kind"]
-    if kind == "headline":
+    if kind in ("sentence",):
+        sentence_card(canvas, scene, scene_t)
+    elif kind == "source":
+        source_card(canvas, scene, scene_t)
+    elif kind in ("rundown", "recap"):
+        list_card(canvas, scene, scene_t)
+    elif kind == "standby":
+        standby_card(canvas, scene, scene_t)
+    elif kind == "headline":
         headline_card(canvas, scene, scene_t)
     elif kind == "citation":
         citation_card(canvas, scene, scene_t)
@@ -144,7 +199,7 @@ def draw_scene(canvas, scene, scene_t: float, global_frame: int, ticker: str):
         bar_chart(canvas, scene, scene_t)
     else:
         title_card(canvas, scene, scene_t)
-    chrome(canvas, scene_t, global_frame, ticker)
+    chrome(canvas, scene_t, global_frame, ticker, scene.get("duration", 6.0))
 
 
 def new_surface():

@@ -1,1 +1,1 @@
-{"state":"waiting","todo_state":"needs_you","msg":"Day 0 done: 60 s bulletin (10x6 s segments + manifest) rendered on runner in 61 s pipeline, 25/25 tests pass. Needs Trevor: watch clip, yes/no, then set secrets."}
+{"state":"running","msg":"Day 1 build in progress: ranker, Haiku writer + fact-check (mock-tested), 10-min episode renderer, slate/replay pool, seam tests written; next: real runs on Actions."}

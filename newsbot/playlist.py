@@ -96,3 +96,70 @@ def check_continuity(earlier: str, later: str) -> list[str]:
     if b["dseq"] != a["dseq"] + removed_disc:
         errs.append(f"DISCONTINUITY-SEQUENCE {b['dseq']} != {a['dseq']} + {removed_disc} removed")
     return errs
+
+
+# ---------------- Day 1: channel playlist (bulletin -> slate/replay -> loop) -----------------------
+# A "block" is a run of segments that were encoded together (one episode, the slate set, one replay).
+# Segments inside a block have continuous timestamps; each block starts its own timestamp sequence, so every
+# block boundary (including the wrap from the last block back to the first) carries EXT-X-DISCONTINUITY
+# (RFC 8216 4.3.2.3: required when the timestamp sequence changes or encoding parameters change).
+
+def cycle_layout(blocks: list[dict]):
+    segs = [(b["id"], s) for b in blocks for s in b["segments"]]
+    starts, n = set(), 0
+    for b in blocks:
+        starts.add(n)
+        n += len(b["segments"])
+    return segs, starts
+
+
+def tags_before(first: int, n: int, starts: set[int]) -> int:
+    """Number of discontinuity-tagged segments with global index < first (segment 0 is never tagged)."""
+    if first <= 0:
+        return 0
+    m = first  # indices 0..first-1
+    full, r = divmod(m, n)
+    count = full * len(starts) + sum(1 for b in starts if b < r)
+    return count - (1 if 0 in starts else 0)
+
+
+def channel_playlist(blocks: list[dict], live: int, window: int = 5, base_url: str = "") -> str:
+    """Live playlist whose live edge is global segment number `live` (the clock decides it in the Worker).
+    Global segment k plays cycle[k % N]; MEDIA-SEQUENCE is k of the first listed segment, so it never decreases
+    even as the cycle loops. DISCONTINUITY-SEQUENCE counts tagged segments that already left the window."""
+    segs, starts = cycle_layout(blocks)
+    n = len(segs)
+    first = max(0, live - window + 1)
+    target = math.ceil(max(s["duration"] for _, s in segs))
+    lines = ["#EXTM3U", "#EXT-X-VERSION:3", f"#EXT-X-TARGETDURATION:{target}",
+             f"#EXT-X-MEDIA-SEQUENCE:{first}", f"#EXT-X-DISCONTINUITY-SEQUENCE:{tags_before(first, n, starts)}"]
+    for k in range(first, live + 1):
+        _, s = segs[k % n]
+        if k > 0 and (k % n) in starts:
+            lines.append("#EXT-X-DISCONTINUITY")
+        lines += [f"#EXTINF:{s['duration']:.3f},", f"{base_url}{s['uri']}"]
+    return "\n".join(lines) + "\n"
+
+
+def check_discontinuities_against_media(text: str, infos: dict, joins_continuously) -> list[str]:
+    """For every adjacent pair in the playlist: if the media says the join is NOT continuous (parameter or
+    timestamp change) the second segment must be preceded by EXT-X-DISCONTINUITY."""
+    p = parse(text)
+    errs = []
+    for i in range(1, len(p["segs"])):
+        a, b = p["segs"][i - 1], p["segs"][i]
+        if not b["disc"] and not joins_continuously(infos[a["uri"]], infos[b["uri"]]):
+            errs.append(f"{a['uri']} -> {b['uri']}: media is discontinuous but no EXT-X-DISCONTINUITY")
+    return errs
+
+
+def check_sequence_over_time(blocks: list[dict], lives: range, window: int = 5) -> list[str]:
+    """RFC 8216 6.2.1/6.2.2 style invariants across successive reloads of the generated playlist."""
+    errs, prev = [], None
+    for live in lives:
+        cur = channel_playlist(blocks, live, window)
+        errs += [f"live={live}: {e}" for e in check_media_playlist(cur, expect_seg_seconds=None)]
+        if prev is not None:
+            errs += [f"live={live}: {e}" for e in check_continuity(prev, cur)]
+        prev = cur
+    return errs
