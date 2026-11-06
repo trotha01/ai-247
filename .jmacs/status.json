@@ -1,1 +1,1 @@
-{"state":"running","msg":"Searched docs/workflows; PR #18 (R2 publish) merged, day1 run 42212912268 in its Publish-to-R2 step; sandbox cannot reach workers.dev/pages.dev yet, requesting network access"}
+{"state":"running","msg":"R2 publish confirmed (run 42212912268: 105 segments, root manifest.json last); smoke.sh OK on the Worker; player plays via ?src= (no errors); opening the streamUrl PR"}
