@@ -15,11 +15,11 @@ AI-247 "fix PR 8 check and test R2 upload": get PR #8 (Day 3 dark-mode link colo
 - PR #18 (this work) ci green (tests + worker-site-e2e), squash-merged to main as 31f27fb. Branch restarted from main for the docs note.
 - PR #8 ci re-run after update-branch: tests job green; worker-site-e2e timed out in its Node install step (npm ci / playwright install, no output for 8 min, the same transient stall; the identical job on PR #18 passed minutes later). Re-run 1 of 2 requested (gh run rerun --failed).
 - day1-episode dispatch 1 of 2: llm=off, run 42212912268 on main (head 31f27fb).
+- PR #8 re-run green (tests + worker-site-e2e); squash-merged to main as 218a784. Part A complete.
 
 ## Pending
-- PR #8: merge once the re-run is green (one re-run left; if it stalls again, report and stop).
 - day1-episode dispatch 2 of 2 (llm=on) after run 42212912268 finishes; confirm keys and the root manifest in both logs.
 - "R2 upload verified" note in docs/PLAN.md via PR from this branch; merge after ci; status done.
 
 ## Next step
-Wait for run 42212912268 and the PR #8 re-run.
+Wait for run 42212912268, then dispatch llm=on.
