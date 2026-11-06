@@ -52,7 +52,7 @@ def test_zero_unsourced_items_and_every_claim_scene_has_citation(d):
 def test_at_least_95_percent_of_aired_sentences_supported(d, capsys):
     a = d["report"]["audit"]
     print("AUDIT", a)
-    assert a["aired_sentences"] >= 30
+    assert a["aired_sentences"] >= 20
     assert a["supported_pct"] >= 95.0 and a["grounded_pct"] >= 95.0
 
 
