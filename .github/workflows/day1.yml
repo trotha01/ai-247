@@ -1,8 +1,16 @@
 name: day1-episode
 
 # Day 1: render one 10-minute episode as 6 s HLS segments + manifest, plus the slate loop and replay pool.
-# Triggers: manual (workflow_dispatch) and a 3-hourly TEST cron. To stop the cron without a commit, either set the
-# repo variable DAY1_CRON_ENABLED to "false" or run: gh workflow disable day1-episode -R trotha01/ai-247
+# Triggers: manual (workflow_dispatch) and a 3-hourly cron (unattended). To stop the cron without a commit, either set
+# the repo variable DAY1_CRON_ENABLED to "false" or run: gh workflow disable day1-episode -R trotha01/ai-247
+#
+# Scheduled runs: GitHub fires `schedule` only from this file on the default branch (main), at most every 5 minutes,
+# delayed or dropped under load, and switches the cron off after 60 days without repository activity. A cron run has
+# no `inputs`, so every `inputs.*` expression below is empty: TTS = kokoro (espeak-ng fallback) and the Claude Haiku
+# writer is ON when the ANTHROPIC_API_KEY secret exists (extractive script otherwise). The per-run Claude cap
+# (NEWSBOT_MAX_RUN_USD, 0.05 USD) is a preflight guard: a call that could cross it is not made, the rest of the
+# rundown goes extractive and `budget_abort` is recorded, so the cap never fails a run. 8 runs/day at ~0.005 USD
+# each is ~1.2 USD/month, inside the 10 USD monthly limit of docs/PLAN.md.
 on:
   workflow_dispatch:
     inputs:
@@ -53,6 +61,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
+      - name: Trigger
+        # One line per run saying how it was started (schedule vs dispatch). No secrets, no variables echoed.
+        run: echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
@@ -88,11 +100,13 @@ jobs:
           key: kokoro-int8-v1.0
 
       - name: Fetch earlier episodes for the replay pool (best effort)
+        # `--workflow` takes the workflow FILE name (day1.yml); "day1-episode.yml" was a 404 on every run, so no replay
+        # was ever fetched (the R2 publish takes its replays from the live manifest instead and is unaffected).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p replays
-          ids=$(gh run list -R "$GITHUB_REPOSITORY" --workflow day1-episode.yml --status success --limit 3 --json databaseId -q '.[].databaseId' || true)
+          ids=$(gh run list -R "$GITHUB_REPOSITORY" --workflow day1.yml --status success --limit 3 --json databaseId -q '.[].databaseId' || true)
           for id in $ids; do
             gh run download "$id" -R "$GITHUB_REPOSITORY" -n episode-day1 -D "replays/$id" || echo "no artifact for run $id"
           done
