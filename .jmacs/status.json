@@ -1,1 +1,1 @@
-{"state":"running","msg":"Failover built and green locally (71 unit + 7 wrangler-dev Worker tests, 8 Python tests); opening PR and waiting for CI"}
+{"state": "running", "msg": "PR #20 open (cloud/ai247-failover -> main), waiting for CI (tests + worker-site-e2e), then merge; 91 Worker + 25 Python tests green locally after merging main"}
