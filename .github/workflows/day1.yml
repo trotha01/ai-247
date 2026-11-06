@@ -100,7 +100,18 @@ jobs:
         run: cat out1/report.json | head -c 6000 || true
 
       - name: Tests (Day 1 units + seam on the real render)
-        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py
+
+      - name: Publish to R2 (segments first, root manifest.json last; skipped without the R2 secrets)
+        # Only after the render passed its tests. Layout: docs/R2_LAYOUT.md (B) + docs/MANIFEST-SWAP.md.
+        # Secrets are empty when unset (forks, no secrets): the step prints one line and exits 0. Never echoed.
+        timeout-minutes: 10
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m newsbot.publish out1
 
       - name: Job summary
         if: always()

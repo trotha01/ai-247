@@ -54,3 +54,23 @@ manifest.json   {"version":2,"segment_seconds":6,"epoch":<unix>,
 5. Content types: `.ts` `video/mp2t`, `.json` `application/json` (already what `r2.py` sets; the Worker does not depend on it for `.ts`).
 
 Known limitation unchanged from `docs/DAY2.md`: swapping the manifest mid-stream changes what `k % N` maps to.
+
+## Day 1 uploader (implemented: `newsbot/publish.py`, step "Publish to R2" in `day1.yml`)
+
+Runs only after the render passed its tests, and only when the four `R2_*` secrets exist (otherwise one log line,
+exit 0). Per run, with `<ts>` the publish time (`%Y%m%dT%H%M%SZ`), in this order:
+
+```
+bulletins/<ts>/seg_000.ts .. seg_099.ts        video/mp2t
+bulletins/<ts>/manifest.json                   application/json   (per-bulletin, after its segments)
+bulletins/<ts>/slate/slate_000.ts .. _004.ts   video/mp2t
+bulletins/<ts>/slate/manifest.json             application/json
+manifest.json                                  application/json   (root channel manifest, ONE PutObject, LAST)
+```
+
+The root manifest's cycle is `[bulletin <ts>, slate <ts>/slate, up to 3 replays]`, where the replays are the
+bulletin/replay blocks of the manifest that was live (already in R2, so nothing is re-uploaded; `uri` is the full
+key). Continuity fields `epoch` (taken from the live manifest, else `newsbot.channel.EPOCH` = the Worker's
+`EPOCH` var), `cycle_start_k`, `cycle_start_dseq` and `prev` follow `docs/MANIFEST-SWAP.md`; the Python port in
+`newsbot/channel.py` is tested against vectors from `worker/src/playlist.js` (`tests/test_publish.py`). Nothing is
+ever deleted or overwritten (fresh prefix per run). `out1/publish.json` lists every key written, in order.

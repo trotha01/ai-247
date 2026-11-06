@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #8 hung in pip install (pre-#12 branch); updating it from main and re-running; day1.yml has no R2 upload, dispatching day0-bulletin (has R2 secrets) to test r2.py"}
+{"state":"running","msg":"PR #8 updated from main, ci re-running; day0 run 42211796435 green with r2_upload 18 s; wiring Day 1 publish (segments first, root manifest last) in a PR, then two day1 dispatches"}

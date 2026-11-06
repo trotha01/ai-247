@@ -35,7 +35,7 @@ jobs:
           done
           echo "install failed after 3 attempts"; exit 1
       - name: Tests (no ANTHROPIC_API_KEY in this job)
-        run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py
+        run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py tests/test_publish.py
 
   worker-site-e2e:
     # Worker unit + wrangler-dev tests, real-uploader -> local R2 -> Worker layout test, and the browser e2e of
