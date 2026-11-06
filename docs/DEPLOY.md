@@ -11,7 +11,7 @@ Production deploys happen automatically from `.github/workflows/deploy.yml` on e
 
 The Pages project `ai-247` was created by direct upload and is **not Git-connected**, so this workflow is the only thing that updates the site after a merge. Both jobs run under one concurrency group (`deploy-production`), so deploys queue instead of overlapping. The workflow can also be run by hand (Actions -> deploy -> Run workflow, choose `all`, `worker` or `site`).
 
-The smoke test fails the job if `/healthz` is not `ok`, `/live.m3u8` does not start with `#EXTM3U`, the CORS header is missing, the first segment is not a 200 with a `video/*` content type, or `EXT-X-MEDIA-SEQUENCE` does not rise within ~25 s. Note that `/live.m3u8` is a 503 until `manifest.json` exists in the R2 bucket (see `docs/DAY2.md`), so the first Worker deploy fails the smoke step until the bucket is seeded; the Worker is deployed by then regardless.
+The smoke test fails the job if `/healthz` is not ok (plain `ok` or JSON `"ok": true`, see `docs/FAILOVER.md`), `/live.m3u8` does not start with `#EXTM3U`, the CORS header is missing, the first segment is not a 200 with a `video/*` content type, or `EXT-X-MEDIA-SEQUENCE` does not rise within ~25 s. Note that `/live.m3u8` is a 503 until `manifest.json` exists in the R2 bucket (see `docs/DAY2.md`), so the first Worker deploy fails the smoke step until the bucket is seeded; the Worker is deployed by then regardless.
 
 ## Required secrets (repository secrets, names only)
 
