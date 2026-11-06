@@ -47,6 +47,17 @@ def test_rundown_story_count_within_floor_and_12_from_multiple_sources(d):
         assert len({s["source"] for s in d["script"]["stories"]}) >= 4
 
 
+def test_topic_episode_is_on_topic_and_not_a_repeat(d):
+    t = d["script"].get("topic")
+    if not t:
+        pytest.skip("not a topic episode")
+    pick = json.loads((EP / "topic_pick.json").read_text())
+    assert pick["topic"]["id"] == t["id"] and pick["mode"] == "topic"
+    sc = next(s for s in pick["scores"] if s["id"] == t["id"])
+    assert sc["blocked"] is None and sc["score"] > 0
+    assert d["report"]["topic"]["id"] == t["id"]
+
+
 def test_zero_unsourced_items_and_every_claim_scene_has_citation(d):
     assert d["report"]["audit"]["unsourced_items"] == 0
     for st in d["script"]["stories"]:
