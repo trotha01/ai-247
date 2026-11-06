@@ -1,0 +1,28 @@
+--- a/.github/workflows/day1.yml
++++ b/.github/workflows/day1.yml
+@@ -48,12 +48,21 @@
+           echo "nproc: $(nproc)"; free -m | head -2; lscpu | grep -E "Model name"; df -h . | tail -1
+ 
+       - name: Install system + python deps
++        timeout-minutes: 10   # normal is <1 min; fail fast instead of hanging for the 35 min job limit
+         run: |
++          set -x
+           start=$SECONDS
+-          sudo apt-get update -qq
+-          sudo apt-get install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
+-          command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg
+-          pip install -q -r requirements.txt
++          # Heartbeat: every 60 s print what is running, so a hang shows which process (apt, dpkg, pip) is stuck.
++          ( while sleep 60; do echo "::group::heartbeat $((SECONDS-start))s"; ps -eo pid,etime,stat,args --sort=start_time | grep -E "apt|dpkg|pip|curl" | grep -v grep; echo "::endgroup::"; done ) &
++          hb=$!
++          trap 'kill $hb 2>/dev/null || true' EXIT
++          sudo apt-get update -o Dpkg::Progress-Fancy=0
++          echo "apt update: $((SECONDS-start)) s"
++          sudo apt-get install -y -o Dpkg::Progress-Fancy=0 -o Acquire::Retries=3 \
++            libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
++          echo "apt install: $((SECONDS-start)) s"
++          command -v ffmpeg >/dev/null || sudo apt-get install -y -o Acquire::Retries=3 ffmpeg
++          pip install -v --progress-bar off -r requirements.txt
+           echo "install stage: $((SECONDS-start)) s"
+ 
+       - uses: actions/cache@v6

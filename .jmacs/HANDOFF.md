@@ -1,10 +1,10 @@
 # Handoff
 ## Objective
-Cancel stalled day1-episode run 42197984840 and re-dispatch; report outcome.
+Cancel stalled day1-episode run 42197984840, re-dispatch, and propose verbose install logging.
 ## Done
-- 42197984840 was in_progress on "Install system + python deps" (~28 min); cancelled (conclusion cancelled). Log had no pip/apt output past dpkg unpack at 10:04Z (-qq), so apt vs pip unclear; step ran only ~38 s in the new run, so stall looks transient.
-- My dispatch (llm=off) 42203099252 was auto-cancelled by the concurrency group; two other dispatches by trotha01 landed the same second: 42203098918 (ran, success, artifact episode-day1 ~62 MB) and 42203110356 (pending/in_progress, still running).
+- 42197984840 cancelled; replacement run 42203098918 succeeded (install 38 s, render 9m44s, artifact episode-day1). Root cause of the stall not identified (log silent due to -qq).
+- Proposal written: .jmacs/proposal-day1-install-logging.patch (not applied to the workflow, not pushed to main). It drops -qq, adds set -x, a 60 s ps heartbeat, apt Acquire::Retries=3, pip -v, and timeout-minutes: 10 on the install step. Checked: YAML parses, patch applies cleanly (git apply --check).
 ## Pending
-- Nothing for me; 42203110356 is not mine.
+- Trevor decides whether to apply it: git apply .jmacs/proposal-day1-install-logging.patch
 ## Next step
-None. Optional proposal: add timeout-minutes: 10 to the install step (and retry) so a hang fails fast.
+None for me.
