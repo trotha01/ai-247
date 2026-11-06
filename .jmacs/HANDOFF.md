@@ -1,22 +1,31 @@
 # Handoff
 
 ## Objective
-AI-247 merge PR #19 (streamUrl) and PR #20 (replay-pool failover) and verify that the plain https://ai-247.pages.dev/ plays the live channel without `?src=`, and that the Worker's failover did not break the live stream.
+AI-247 "fix PR 8 check and test R2 upload": get PR #8 (Day 3 dark-mode link colour + docs) green and merged; exercise the real R2 upload once and record the result in docs/PLAN.md.
 
 ## Done
-- Search: `.github/workflows/{deploy,ci,day1,replay-pool}.yml`, `docs/{DEPLOY,PLAN,DAY2,R2_LAYOUT,MANIFEST-SWAP,FAILOVER}.md`, `site/config.json`, PR #19 and PR #20 files/bodies/comments (no review comments on either), deploy runs 42214640757 and 42215042026, post-merge CI.
-- PR #19 (cloud/ai247-golive): already merged by its worker at 12:02Z (squash 6238d60). Diff is exactly `site/config.json` `streamUrl: "" -> https://ai247-live.trotha01.workers.dev/live.m3u8` plus `.jmacs/` files. Deploy run 42214640757: `deploy-site` (config sanity, Pages direct upload, site smoke) all green.
-- PR #20 (cloud/ai247-failover): already merged by its worker at 12:05Z (squash 2d5e304). Deploy run 42215042026: `test-worker`, `deploy-worker`, Worker smoke all green. Review against DAY2/R2_LAYOUT/MANIFEST-SWAP/FAILOVER: `channel.js` falls back on missing / invalid / empty / stale (`MAX_MANIFEST_AGE_S`, default 0 = off) / missing-segment; `failover.js` keeps MEDIA-SEQUENCE clock-derived (monotonic), tags the switch (`k0`, pool[0] = block start) and the return (`r`, forced), folds completed failovers into `dseq_offset`; live chain returns in its own phase so the uploader's `cycle_start_k`/`prev` contract is untouched. `/healthz` JSON reports `source`, `reason`, `manifest.age_s`, pool state, `failover {since_k, return_k}`. No cron, no notifier (replay-pool workflow is dispatch-only). Tests: 16 unit (hls-parser on every reload: sequences never decrease, per-segment dseq = global tag count, URI/tag per number never change, switch/return tagged, hourly swaps during outage, cold start, flapping, nested re-entry) + 7 dev (real Worker, R2 objects deleted/re-put). 71 unit tests re-run locally: pass. No blocker found.
-- PR #21 (golive final status, `.jmacs/` only) merged 12:11Z by its worker; nothing to do.
-- Live verification from this sandbox (both hosts reachable):
-  - `curl https://ai-247.pages.dev/config.json` -> 200, `streamUrl` = Worker URL.
-  - Headless Chromium on plain `https://ai-247.pages.dev/` (no `?src=`): body state `live`, `video.currentTime` 12.5 s -> 36.5 s over 27 s, readyState 4, not paused, no OFFLINE overlay, 0 page errors, 0 console errors; `config.json`, `live.m3u8` and `seg/bulletins/20261106T115430Z/seg_048..054.ts` all 200 from the Worker (cross-origin).
-  - Worker after failover deploy: `/healthz` 200 `source=live-manifest`, manifest age ~835 s, 105 segments / 2 blocks, 5 segments HEAD-checked; `/live.m3u8` 200 `#EXTM3U`, `access-control-allow-origin: *`, `x-ai247-source: live-manifest`, MEDIA-SEQUENCE 161177 -> 161179 across 8 s; `scripts/smoke.sh` SMOKE OK.
+- Read ci.yml, day0.yml, day1.yml, newsbot/r2.py, docs/PLAN.md, docs/DAY2.md, docs/R2_LAYOUT.md, PRs #8, #11 (merged), #12 (merged), #13 (merged).
+- PR #8 run 42202479950: apt finished 10:56:22, then no output inside `pip install -q` until the 15 min job timeout cancelled it at 11:08:33. Same stall PR #12 fixed on main; PR #8's branch is 7 commits behind main.
+- day1.yml has NO R2 upload (newsbot/day1.py never calls r2.py). The uploader is only called from newsbot/pipeline.py (Day 0), and day0.yml passes the R2_* secrets. So the upload test uses the day0-bulletin workflow on main.
+
+- PR #8 branch updated from main via the REST update-branch route (head ef3d049); ci run 42211791142 in progress.
+- day0-bulletin run 42211796435 on main (dispatched before the orchestrator's correction): green, stage r2_upload 18.36 s with the real secrets, Day 0 layout bulletins/<ts>/ (manifest.json before segments).
+- Orchestrator correction received: wire the upload into Day 1. Done on this branch: newsbot/channel.py (Python port of the Worker swap math, vectors checked against worker/src/playlist.js), newsbot/publish.py (segments first, per-block manifest after its segments, root manifest.json last in one PutObject; replays from the live manifest; skip with a log line without secrets), r2.py client()/bucket() helpers, tests/test_publish.py (17 tests, pass), day1.yml step "Publish to R2" after the Tests step with the four R2_* secrets, ci.yml runs the new test, docs/R2_LAYOUT.md section.
+
+- PR #18 (this work) ci green (tests + worker-site-e2e), squash-merged to main as 31f27fb. Branch restarted from main for the docs note.
+- PR #8 ci re-run after update-branch: tests job green; worker-site-e2e timed out in its Node install step (npm ci / playwright install, no output for 8 min, the same transient stall; the identical job on PR #18 passed minutes later). Re-run 1 of 2 requested (gh run rerun --failed).
+- day1-episode dispatch 1 of 2: llm=off, run 42212912268 on main (head 31f27fb).
+- PR #8 re-run green (tests + worker-site-e2e); squash-merged to main as 218a784. Part A complete.
+
+- Run 42212912268 (llm=off) green: Publish step wrote bulletins/20261106T115430Z/seg_000..099.ts (video/mp2t), the block manifest, slate/slate_000..004.ts + manifest, then root manifest.json last; 108 objects, 34,139,323 bytes, 116 s; cycle_start_k 161021, epoch 1793000000, no prev.
+- Dispatch 2 of 2: llm=on, run 42214045472 green. Publish read the live manifest (cycle_start_k=161021), wrote bulletins/20261106T120928Z/ (100 seg + manifest, 5 slate + manifest), then root manifest.json last: cycle_start_k 161231, cycle_start_dseq 4, replay = run 1 bulletin, prev = run 1 manifest. 108 objects, 33,533,180 bytes, 91 s. Haiku cost 0.00495 USD.
+- docs/PLAN.md section "R2 upload verified" complete on this branch.
+- Live endpoint: Worker now deployed (PRs #19-#23). Its host and pages.dev are blocked from the sandbox (proxy 403 / ENOTFOUND), so the read-only check is the deploy smoke test log (run 42215042026): /healthz ok source=live-manifest, /live.m3u8 media-sequence 161138 -> 161139, fetched seg/bulletins/20261106T115430Z/seg_012.ts video/mp2t 295,536 bytes = run 1's upload. Recorded in PLAN.md.
+- PR #22 (docs note) was 'dirty' against main (other workers' .jmacs edits), so GitHub created no ci run for 30 min; merged main in (kept this task's .jmacs), pushed.
 
 ## Pending
-- Trevor: `pool/manifest.json` is not in R2 yet (`/healthz` pool.problem = missing), so until the `replay-pool` workflow is run once (Actions -> replay-pool -> source=r2) a broken `manifest.json` only yields `live-manifest-cached`, not the pool. Not run here (writes to the production bucket; left to Trevor as PR #20's handoff said).
-- Trevor: `MAX_MANIFEST_AGE_S` is `0` (stale rule reports but does not switch); set it in `worker/wrangler.toml` (e.g. 14400) only if a dead pipeline should switch to the pool.
-- No revert needed: the live stream is healthy after the failover deploy.
+- Docs PR from this branch: merge after ci, then status done.
+- "R2 upload verified" note in docs/PLAN.md via PR from this branch; merge after ci; status done.
 
 ## Next step
-Merge this branch's `.jmacs/` update to main (PR, after CI), then done.
+Merge the docs PR after ci; set status done.

@@ -1,1 +1,1 @@
-{"state": "running", "msg": "PR #19 and #20 merged (by their workers) and deployed green; plain https://ai-247.pages.dev/ plays in headless Chromium (currentTime 12.5->36.5s, no errors); Worker healthy on live-manifest after failover deploy; opening PR for .jmacs update"}
+{"state":"running","msg":"Both day1 runs published to R2 (42212912268 llm=off: 108 objects 34.1 MB; 42214045472 llm=on: 108 objects 33.5 MB, chained onto run 1 at cycle_start_k 161231). Docs PR with the PLAN.md note opening; done after it merges"}
