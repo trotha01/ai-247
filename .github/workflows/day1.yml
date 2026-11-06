@@ -45,8 +45,14 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Trigger
-        # One line per run saying how it was started (schedule vs dispatch). No secrets, no variables echoed.
-        run: echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
+        # One line per run saying how it was started (schedule vs dispatch) and the state of the cron switch.
+        # DAY1_CRON_ENABLED is a repository *variable* (not a secret); the job-level `if` above skips a scheduled
+        # run only when it is exactly "false". No secrets are echoed.
+        env:
+          CRON_SWITCH: ${{ vars.DAY1_CRON_ENABLED }}
+        run: |
+          echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
+          echo "DAY1_CRON_ENABLED=${CRON_SWITCH:-<unset>}"
 
       - uses: actions/checkout@v7
 

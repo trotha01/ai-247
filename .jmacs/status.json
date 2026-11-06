@@ -1,1 +1,1 @@
-{"state":"running","msg":"README live-site line added on cloud/ai247-readme; opening the PR and waiting for tests, worker-site-e2e and claude-review"}
+{"state":"running","msg":"PR #31 was green but conflicted with main (other session .jmacs files); merged main into cloud/ai247-readme, waiting for checks to re-run, then squash-merge"}
