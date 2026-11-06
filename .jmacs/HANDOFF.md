@@ -11,8 +11,8 @@ AI-247 "local end-to-end and R2 key layout" (Worker/site/docs/ci only; newsbot/ 
 - ci.yml job `worker-site-e2e` added.
 
 ## Pending
-- PR + CI check + merge to main.
+- (done once merged) PR #11 CI green, merging.
 - Day 1 owner: upload manifest.json LAST (r2.py still sorted-order) and adopt Layout B in docs/R2_LAYOUT.md.
 
 ## Next step
-Open PR, wait for CI, merge.
+Nothing for this item. Day 1 owner follows docs/R2_LAYOUT.md (manifest last).
