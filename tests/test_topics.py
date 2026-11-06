@@ -86,7 +86,12 @@ def test_pick_is_deterministic_and_prefers_fresh_unaired_topic():
     assert t["id"] == t2["id"] == "agent-harnesses" and len(titems) == 6
     s = {x["id"]: x for x in scores}
     assert s["agent-harnesses"]["novelty"] == 1.0 and s["agent-harnesses"]["score"] > s["ai-vfx"]["score"] > 0
-    assert s["agent-harnesses"]["freshness"] <= topics.FRESH_CAP
+    assert s["agent-harnesses"]["freshness"] <= topics.FRESH_TOP
+    # freshness looks at the freshest 12 items, so 70 stale items do not outrank 6 fresh ones
+    stale = [item("OpenAI", f"Coding agent {_w(k, 7, 11)} archive", "The coding agent sandbox. " * 6, f"https://example.com/old/{k}", 24 * 10 + k) for k in range(70)]
+    _, sc2, _ = topics.pick(c, stale + vfx_items(6, age_h=1), history([]), NOW)
+    s2 = {x["id"]: x for x in sc2}
+    assert s2["ai-vfx"]["score"] > s2["agent-harnesses"]["score"] > 0
 
 
 def test_recent_repeat_is_blocked_unless_genuinely_new_news():
@@ -108,6 +113,16 @@ def test_recent_repeat_is_blocked_unless_genuinely_new_news():
     eps = [ep("1", "agent-harnesses", last_ts)] + [ep(str(k), "ai-vfx", last_ts[:-1] + "Z") for k in range(2, 2 + c["repeat_after_episodes"])]
     _, scores3, _ = topics.pick(c, agent_items(6), history(eps), NOW)
     assert {x["id"]: x for x in scores3}["agent-harnesses"]["novelty"] == 1.0
+
+
+def test_unpublished_episode_never_counts_as_covered_or_aired():
+    c = cfg()
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW - 3600))
+    e = ep("9", "agent-harnesses", ts, [f"https://example.com/agents/{k}" for k in range(6)])
+    e["published"] = False
+    t, scores, titems = topics.pick(c, agent_items(6), history([e]), NOW)
+    assert t["id"] == "agent-harnesses" and len(titems) == 6 and {x["id"]: x for x in scores}["agent-harnesses"]["novelty"] == 1.0
+    assert topics.covered_urls(history([e])) == set() and topics.aired(history([e])) == []
 
 
 def test_nothing_pickable_falls_back_and_force_overrides():

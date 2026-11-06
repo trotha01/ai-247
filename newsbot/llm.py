@@ -224,7 +224,7 @@ def write_story(client, meter, item, stats, src_chars: int = SRC_CHARS):
                     kept.append((t, "claude-rewrite"))
         stats["dropped"] += len(bad) - sum(1 for t, m in kept if m == "claude-rewrite")
     # headline: always safe -> fall back to the feed title (verbatim from the source)
-    headline = kept_head or item.title
+    headline = kept_head or sm.spoken_headline(item.title)   # verbatim from the source, cut to a spoken length
     texts = [t for t, _ in kept]
     if len(texts) < 2:
         raise ValueError("fewer than 2 supported sentences")

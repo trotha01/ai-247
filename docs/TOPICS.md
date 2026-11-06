@@ -107,7 +107,26 @@ before every call; the writer runs before discovery, so a stop only drops discov
 
 ## Measured run
 
-_Pending: filled in after the first dispatched episode of this build._
+_Pending: filled in after the first dispatched episode of this build (Fable 5.1 plan + web-searching discovery, D1 history)._
+
+### Baseline: first topic episode of the Haiku-only build (run 42229528561, 2026-11-06, before Trevor's four changes)
+
+| Measure | Value |
+|---|---|
+| Topic picked | `agent-harnesses` (both seed lanes had 60-70 uncovered items; the freshness sum saturated at the old cap of 8, so the tie broke on id; freshness now counts the 12 freshest items) |
+| Inputs | 8 general feeds (105 items) + 10 topic feeds/repos (91 items); web: arXiv 21, GitHub search 24, HN leads 21 candidates |
+| Primary pages read | 8 fetched (3 leads first), 5 with text swapped in (2,084-5,976 chars); 3 openai.com pages refused bots (HTTP 403); 7 stories kept their feed text (budget used) |
+| Stories | 9 written from 5 sources, 8 aired (600.0 s, 100 segments, 31 s pad); 45 drafted lines, 33 supported first pass (73%), 4 rewritten (3 supported), 1 dropped, 0 extractive fallbacks |
+| Aired sentences | 100% supported, 100% grounded, 0 unsourced |
+| Cost (Claude Haiku 5.5) | **0.00586 USD** total: plan call 0.00039, writer + checker + repair the rest; cap 0.05 |
+| Discovery call | failed (`ValueError`: no JSON in the reply, most likely truncated at 700 output tokens); raised to 1,200 |
+| Wall-clock | topic research 15.7 s, script 35 s, TTS 198 s, render 300 s; pipeline 594 s; publish 128 s; job 15 min |
+| History | entry was committed to `episodes/history.json` by that build (since removed from the repo; the R2 mirror still has it and seeds D1 on first use) |
+| Live check (runner) | playlist 200, media sequence rising, segments 200 video/mp2t, label visible; `state live` not reached within 60 s on the runner (state `connecting`, segments were being fetched); the same check from the cloud session passed with video time advancing |
+| Published | `bulletins/20261106T140715Z/` (105 segments, 32.5 MB); the Worker swaps it in at the next cycle boundary |
+
+Per-day estimate at the 3-hourly cron: 8 x 0.006 = about 0.05 USD/day on Haiku (the longer primary texts cost less
+than estimated because openai.com pages are not fetchable and the fetch budget is 8 pages).
 
 ## Outputs
 
