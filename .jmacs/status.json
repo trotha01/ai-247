@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #8 updated from main, ci re-running; day0 run 42211796435 green with r2_upload 18 s; wiring Day 1 publish (segments first, root manifest last) in a PR, then two day1 dispatches"}
+{"state":"running","msg":"R2 publish confirmed (run 42212912268: 105 segments, root manifest.json last); smoke.sh OK on the Worker; player plays via ?src= (no errors); opening the streamUrl PR"}

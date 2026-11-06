@@ -1,4 +1,4 @@
 {
-  "streamUrl": "",
+  "streamUrl": "https://ai247-live.trotha01.workers.dev/live.m3u8",
   "note": "streamUrl is the Day 2 Worker playlist URL (https://.../live.m3u8). Empty means offline: the page shows the fallback message. Override for testing with ?src=<url>."
 }
