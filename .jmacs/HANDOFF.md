@@ -13,11 +13,14 @@ AI-247: hourly cadence with >= 60 min of new footage per run (Trevor's rule: pro
 - Branch restarted from main for PR 2.
 
 ## Pending
-- Run 3 (42256733605, install fix): all 6 installs 35-46 s, 6 renders in progress since 16:58Z; publish expected ~17:10Z. Fill PLAN.md "Run 3", push, merge PR #34 (tests, worker-site-e2e, claude-review were green on 9a27c2e), status done.
-- Cron proof: 16:23Z slot produced no run; watch 17:23Z (hourly.yml has been on main since 15:47Z).
+- Merge PR #34 (all three checks green on 50f9574; the PLAN.md run 3 push re-runs them once more), then status done.
+- Cron proof: 16:23Z slot produced no run; the 17:23Z slot is the next chance (hourly.yml on main since 15:47Z; the Trigger step prints `event=schedule`). If it never fires, that is a GitHub-side question (same symptom as the Day 1 cron), not something in the repo.
 
 ## Done since PR #33
-- Verification run 1 (main): 2 of 6 bulletins published (3 failed the Day 1 floor of 10 stories with 9, 1 install stall); swap at 16:51:26Z verified on pages.dev. Run 2 (branch, floor 6): 3 of 6 (3 install stalls); swap landed exactly at run 1's fresh end (164181). Fixes on the branch: NEWSBOT_MIN_STORIES (6 for slices), install steps bounded per stage with fast-failing pip and 20-minute budgets in hourly.yml and ci.yml, vitest 30 s per-test timeout for the wrangler dev suites, fresh_minutes with inherited blocks, merge of main (PR #29 topic stage) with the topic test restored.
+- Verification run 1 (main): 2 of 6 bulletins (Day 1 floor of 10 stories rejected 3 full bulletins with 9; 1 install stall); swap at 16:51:26Z verified on pages.dev.
+- Run 2 (branch, floor 6): 3 of 6 (3 install stalls); swap landed exactly at run 1's fresh end (164181).
+- Run 3 (branch, install fix): **6 of 6, 60.0 min rendered and published in 15 min**, 613 objects / 195 MB in 80 s, run 2's 3 pending bulletins inherited in front (90 min fresh region), coverage check passed; pages.dev playing run 2's first bulletin at 17:12Z with 0 errors. Haiku slice 0.00583 USD.
+- Fixes in PR #34: NEWSBOT_MIN_STORIES (6 for slices), install steps bounded per stage with fast-failing pip and 20-minute budgets (hourly.yml and ci.yml), vitest 30 s per-test timeout for the wrangler dev suites, fresh_minutes with inherited blocks, merge of main (PR #29) with the topic test restored, PLAN.md "Verification runs".
 
 ## Next step
-When run 3 publishes: read its stitch log (PUBLISH line, rendered_minutes), write PLAN.md "Run 3", push, wait for the three checks, squash-merge PR #34, set status done (or note the shortfall honestly if run 3 is below 60 min).
+Squash-merge PR #34 when the re-run is green, write status done, check the 17:23Z cron slot.
