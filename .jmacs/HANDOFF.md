@@ -10,10 +10,10 @@ AI-247 replay-pool failover (no alerts, no cron, no external services): a bootst
 - Docs: `docs/FAILOVER.md`; two lines in `docs/DAY2.md`.
 
 ## Pending
-- PR #20 open; merge when CI (`tests`, `worker-site-e2e`) is green. main already merged in (PR #11, deploy workflow, Day 1 publisher): `scripts/smoke.sh` and `docs/DEPLOY.md` updated for the JSON `/healthz`; `replay_pool.py` reuses `r2.client()/bucket()`.
+- Nothing on my side: PR #20 merged to main at 2d5e304 after green CI (`tests`, `worker-site-e2e`). main already merged in (PR #11, deploy workflow, Day 1 publisher): `scripts/smoke.sh` and `docs/DEPLOY.md` updated for the JSON `/healthz`; `replay_pool.py` reuses `r2.client()/bucket()`.
 - Merging changes `worker/**`, so the `deploy` workflow (added on main by PR #15/#17) deploys the Worker if the Cloudflare secrets exist. I did not and will not run a deploy myself.
 - Trevor, after deploy: run the `replay-pool` workflow once (source=r2 or artifact) so `pool/manifest.json` exists; set `MAX_MANIFEST_AGE_S` only if a dead pipeline should switch to the pool.
 - Note for the swap owner: `tagsBeforeEras` returns 0 for `first < oldest era start`; if the uploader publishes twice within ~N+10 segments the dropped `prev.prev` makes DISCONTINUITY-SEQUENCE dip to 0 for a few reloads. Not changed here.
 
 ## Next step
-Wait for CI on PR #20, merge, set status done.
+Trevor: the `deploy` workflow on main will deploy the Worker (if the Cloudflare secrets exist); then dispatch the `replay-pool` workflow once (source=r2 after a Day 1 publish, or source=artifact for the Day 0 bulletin) so `pool/manifest.json` exists, and look at `/healthz` (`source`, `manifest.age_s`). Decide whether to set `MAX_MANIFEST_AGE_S` (default 0 = off).
