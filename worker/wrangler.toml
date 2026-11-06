@@ -12,3 +12,10 @@ PREFIX = ""
 WINDOW = "5"
 # Fallback epoch (unix seconds) when manifest.json has no "epoch". Fixed so the clock is stable across deploys.
 EPOCH = "1793000000"
+# Replay-pool failover (docs/FAILOVER.md). POOL_KEY is read under PREFIX. MAX_MANIFEST_AGE_S = 0 disables the
+# staleness rule (a looping manifest is still valid content); CHECK_SEGMENTS upcoming live segments are HEADed on
+# every manifest reload (10 s); FAILOVER_MIN_S is the minimum time on the pool before returning to a healthy manifest.
+POOL_KEY = "pool/manifest.json"
+MAX_MANIFEST_AGE_S = "0"
+CHECK_SEGMENTS = "5"
+FAILOVER_MIN_S = "30"
