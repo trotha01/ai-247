@@ -35,6 +35,10 @@ AI-247: make the GitHub Actions episode cron (`day1-episode`, `23 */3 * * *`) fi
 
   Left open / unclear: whether Trevor has done the Day 0 / Day 1 "watch it" reviews (not verifiable from the repo); `MAX_MANIFEST_AGE_S` is still `0` in `worker/wrangler.toml` (stale rule reports but never switches to the pool), a decision only Trevor can make.
 
+- Trevor's request (14:35Z): manual run dispatched from main (e9fdd8c), run 42235237153, default inputs (tts blank = kokoro, llm on), i.e. what a scheduled run does. Being watched to completion; then R2 / `/healthz` / `live.m3u8` / pages.dev are checked.
+- `DAY1_CRON_ENABLED`: the variables API is 403 through the session proxy, so the value cannot be read here. The job-level gate on a `schedule` event is `vars.DAY1_CRON_ENABLED != 'false'`: unset or any other value = true (job runs); exactly `false` = job skipped, but GitHub still creates a run record with conclusion `skipped`. There is no `schedule` run record at all, so the gate is not why 12:23Z was missed; 09:23Z predates the cron (it reached main at 09:48:54Z). The Trigger step now prints `DAY1_CRON_ENABLED=<value or <unset>>` (a variable, not a secret) so the 15:23Z run shows it.
+- main moved while waiting: PRs #24 (pool seeded, MAX_MANIFEST_AGE_S 14400), #26 (ruleset: `tests`, `worker-site-e2e`, `claude-review` required on main), #28 (pool verify); Trevor dispatched run 42229528561 from `cloud/ai247-topics` at 13:56Z, which published the manifest live at 14:09:22Z (305 segments / 4 blocks). Branch rebased onto e9fdd8c.
+
 ## Pending
 - Wait for the 15:23Z scheduled run; verify success, Publish step keys, root manifest in R2 via `/healthz` (`manifest.uploaded` after 15:23Z, blocks 3 with the new bulletin first).
 - Todo triage: jmacs unavailable here; verdicts in the final handoff for the orchestrator to apply.
