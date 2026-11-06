@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #8 updated from main, ci re-running; day0 run 42211796435 green with r2_upload 18 s; wiring Day 1 publish (segments first, root manifest last) in a PR, then two day1 dispatches"}
+{"state":"running","msg":"Searched docs/workflows; PR #18 (R2 publish) merged, day1 run 42212912268 in its Publish-to-R2 step; sandbox cannot reach workers.dev/pages.dev yet, requesting network access"}
