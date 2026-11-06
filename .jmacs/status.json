@@ -1,1 +1,1 @@
-{"state":"running","msg":"Pool seeded by replay-pool run 42222599138 (/healthz pool.ok true, 2 blocks, 200 segments); daily cron + refresh guard + MAX_MANIFEST_AGE_S=14400 committed on cloud/ai247-pool, local worker dev tests running, PR next"}
+{"state": "running", "msg": "PR #24 open (cloud/ai247-pool -> main): daily guarded refresh + MAX_MANIFEST_AGE_S 14400; pool already seeded by run 42222599138; waiting for ci, then merge, deploy, /healthz check"}

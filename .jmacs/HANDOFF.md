@@ -10,9 +10,9 @@ AI-247 "seed pool/manifest.json in R2 and schedule the replay-pool refresh": the
 - (3) worker/wrangler.toml MAX_MANIFEST_AGE_S "0" -> "14400". Worker unit tests 71 pass locally. docs/FAILOVER.md and docs/PLAN.md updated.
 
 ## Pending
-- Local `npm run test:dev` (wrangler dev --local) running; then push, open the PR, wait for ci (tests + worker-site-e2e), merge.
+- PR #24 open from cloud/ai247-pool (904cf48); local worker dev tests 12 passed. Wait for ci (tests + worker-site-e2e), then merge.
 - After merge: deploy.yml runs test-worker + deploy-worker (worker/** changed) and the smoke test; then read `/healthz` directly: expect source live-manifest, manifest.max_age_s 14400, pool.ok true.
 - Status done only after merge + post-deploy /healthz check.
 
 ## Next step
-Push cloud/ai247-pool, open the PR, wait for ci, merge, verify the deployed /healthz.
+Wait for ci on PR #24, merge, then verify the deployed /healthz (max_age_s 14400, source live-manifest, pool.ok).
