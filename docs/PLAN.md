@@ -78,3 +78,7 @@ Measured on Actions run 42187611180 (`workflow_dispatch`, branch `cloud/ai247-da
 - GitHub docs were not reachable from the cloud session, so these are *from memory, verify on docs.github.com*: scheduled workflows run at most every 5 minutes and can be delayed or dropped under load, so "hourly" cron is fine but not exact; scheduled workflows in public repos are disabled after 60 days without repo activity; GitHub-hosted jobs have a 6-hour limit (set `timeout-minutes` lower, currently 20); standard runners in public repos are 4 vCPU / 16 GB (matches observed).
 - Anthropic per-run cap uses assumed prices (`NEWSBOT_PRICE_IN/OUT` default 1/5 USD per million tokens); verify real Haiku 5.5 prices before Day 1.
 - GitHub Actions marks Node 20 actions deprecated (warning only); bump action versions on Day 1.
+
+## Day 2 status
+
+Worker implemented in `worker/` (not deployed). See `docs/DAY2.md` for behaviour, tests, limitations and the deploy checklist.

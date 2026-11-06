@@ -1,0 +1,14 @@
+name = "ai247-live"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Placeholder bucket name: Trevor creates the real bucket (see docs/DAY2.md). No deploy is done by CI.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ai247-media"
+
+[vars]
+PREFIX = ""
+WINDOW = "5"
+# Fallback epoch (unix seconds) when manifest.json has no "epoch". Fixed so the clock is stable across deploys.
+EPOCH = "1793000000"

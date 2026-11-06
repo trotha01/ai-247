@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "segment_seconds": 6,
+  "generated_by": "extractive",
+  "segments": [
+    {
+      "index": 0,
+      "file": "seg_000.ts",
+      "duration": 6.0,
+      "audio_duration": 5.63,
+      "container_duration": 6.02,
+      "bytes": 100,
+      "sha256": "8dacc3c93ec64b3033f1390f957322f3bce41113b683e7214ee2672d271cea6e",
+      "scene": "intro"
+    },
+    {
+      "index": 1,
+      "file": "seg_001.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 101,
+      "sha256": "a998317e4eeb8beb830519a85f6411369ad39742d350e7a001375b4d421c101d",
+      "scene": "headline"
+    },
+    {
+      "index": 2,
+      "file": "seg_002.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 102,
+      "sha256": "b32b515e18d6ed6ca9f8bc5473b15bb2b1c9d67c3860c114bbd1dcb716d76cdd",
+      "scene": "source"
+    },
+    {
+      "index": 3,
+      "file": "seg_003.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 103,
+      "sha256": "48ffad3edff8ee0eaea3ac1a4002a1ce07ad917ddb21ffe4e19e6e0d513f9882",
+      "scene": "source"
+    },
+    {
+      "index": 4,
+      "file": "seg_004.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 104,
+      "sha256": "8b14d7f63112b47971fde748826b1249403126febbfb30fbb97f2715e28a6f75",
+      "scene": "source"
+    },
+    {
+      "index": 5,
+      "file": "seg_005.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 105,
+      "sha256": "5aff8520a48099f1e5f34b73ff271909796e572d25937c5622081930b7f10222",
+      "scene": "source"
+    },
+    {
+      "index": 6,
+      "file": "seg_006.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 106,
+      "sha256": "9bc24fd31e3c944edf86855503d9e0b7b158561e4422a387d84c649e62a2f097",
+      "scene": "source"
+    },
+    {
+      "index": 7,
+      "file": "seg_007.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 107,
+      "sha256": "3298ab31ad2559e2a29028e23b4750a83d13232965850cc3954a5ed371a5e058",
+      "scene": "source"
+    },
+    {
+      "index": 8,
+      "file": "seg_008.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 108,
+      "sha256": "373419b8a4a5bcb8ac0c0a0f99cb99f41c7f0e2bbe87e86a8e85e4dadcc8aaf0",
+      "scene": "source"
+    },
+    {
+      "index": 9,
+      "file": "seg_009.ts",
+      "duration": 6.0,
+      "audio_duration": 5.95,
+      "container_duration": 6.02,
+      "bytes": 109,
+      "sha256": "4b0fdacf63abf440448690c72421b9b4f284bb254f1afec4df1abe29109c147a",
+      "scene": "source"
+    }
+  ],
+  "sources": [
+    {
+      "source": "OpenAI",
+      "url": "https://example.invalid/a",
+      "published": "2026-11-06"
+    }
+  ]
+}
