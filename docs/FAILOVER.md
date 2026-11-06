@@ -1,8 +1,8 @@
-# Replay-pool failover (no alerts, no cron, no external services)
+# Replay-pool failover (no alerts, no external services)
 
 The channel must never be empty. Two parts:
 
-1. **Bootstrap** (`newsbot/replay_pool.py`, dispatch-only workflow `replay-pool`): publishes `pool/manifest.json` in R2, a loop of the Day 0 bulletin or the latest good episode.
+1. **Bootstrap and refresh** (`newsbot/replay_pool.py`, workflow `replay-pool`: manual plus a daily cron, see "Schedule and refresh guard"): publishes `pool/manifest.json` in R2, a loop of the newest good episodes (or the Day 0 bulletin).
 2. **Worker** (`worker/src/failover.js` pure logic, `worker/src/channel.js` R2 side; `index.js` only delegates): serves the pool whenever `manifest.json` is unusable, and switches back when it is good again, keeping the HLS playlist valid throughout. `/healthz` says which source is on air and how old the manifest is, so Trevor can check by eye. Nothing notifies anyone.
 
 ## When the Worker falls back
@@ -14,7 +14,7 @@ Checked on every manifest reload (cache 10 s, `MANIFEST_TTL_MS`), in this order;
 | `missing` | `{PREFIX}manifest.json` is not in the bucket |
 | `invalid` | not JSON |
 | `empty` | no segments, a segment with duration <= 0, or a bad `cycle_start_k`/`prev` chain (what `layout()`/`eras()` reject) |
-| `stale` | `MAX_MANIFEST_AGE_S > 0` and R2's upload time of `manifest.json` is older than that. Default `0` = off: a looping manifest is still valid content, so staleness is reported in `/healthz` (`manifest.age_s`) but does not switch by default. Set it (e.g. `14400` for 4 h with the 3-hourly cron) if a dead pipeline should switch to the pool. |
+| `stale` | `MAX_MANIFEST_AGE_S > 0` and R2's upload time of `manifest.json` is older than that. Deployed value `14400` (4 h): the 3-hourly `day1-episode` cron (`23 */3`, up to 35 min) normally republishes within ~3.6 h, so one missed or failed run switches the channel to the pool until the next publish lands. `0` turns the rule off (a looping manifest is still valid content); `/healthz` reports `manifest.age_s` either way. |
 | `missing-segment` | one of the next `CHECK_SEGMENTS` (default 5) segments the live mapping would list is not in R2 (HEAD). Checked before any client is sent that URI. |
 
 If the live manifest is unusable and the pool is unusable too, the Worker keeps serving the last good manifest from memory (`source: live-manifest-cached`); only with no history at all does `/live.m3u8` answer 503.
@@ -73,16 +73,37 @@ python -m newsbot.replay_pool --from-dir out --id day0 --upload       # local re
 python -m newsbot.replay_pool --from-dir out --write pool.json        # no R2 secrets: writes the manifest locally, uploads nothing
 ```
 
-`--from-r2` skips uploads whose segments are missing or whose sizes differ from the per-bulletin manifest (truncated uploads) and lists them in the report; it copies `epoch` from the live `manifest.json` when present so the pool and the live manifest share one clock. The workflow `replay-pool` (manual only) runs the same command on a runner with the `R2_*` secrets; with `source=artifact` it downloads a `bulletin-day0`/`episode-day1` artifact and loops that.
+`--from-r2` skips uploads whose segments are missing or whose sizes differ from the per-bulletin manifest (truncated uploads) and lists them in the report; it copies `epoch` from the live `manifest.json` when present so the pool and the live manifest share one clock. The workflow `replay-pool` runs the same command on a runner with the `R2_*` secrets; with `source=artifact` it downloads a `bulletin-day0`/`episode-day1` artifact and loops that.
 
-Tests: `tests/test_replay_pool.py` (fake S3 client: hash checks, newest-complete selection, skip reasons, manifest-last upload order, CLI with and without secrets, the Worker fixture `worker/test/fixtures/replay-pool.json` kept in this shape, and the generated channel playlist passing `newsbot.playlist.check_sequence_over_time`).
+### Schedule and refresh guard
+
+`replay-pool` runs by hand (`workflow_dispatch`) and **daily at 04:41 UTC** (`schedule`, after the 03:23 `day1-episode` cron run has published), with `source=r2 max_blocks=2`: the pool loops the two newest complete episodes in R2. Stop the cron without a commit by setting the repo variable `REPLAY_POOL_CRON_ENABLED` to `false` (or `gh workflow disable replay-pool`). Nothing is ever deleted from R2 (`docs/R2_LAYOUT.md`), so the episodes an older pool points at stay playable; the refresh only keeps the loop recent.
+
+The refresh (`--from-r2 --upload`) never replaces a good `pool/manifest.json` with a bad one (`refresh_decision` in `newsbot/replay_pool.py`):
+
+- Every segment the new pool lists is HEAD-checked in R2 (existence and size) before the manifest is built; incomplete episodes are skipped.
+- No complete episode at all: the run exits 3 and writes nothing (the existing pool stays).
+- The new manifest would have nothing playable (no segments, or a duration <= 0): not uploaded, the existing pool stays. (`build_pool_manifest` refuses an empty pool anyway.)
+- The newest episodes are exactly the ones the pool already lists: no PutObject (the run says `not uploading: unchanged`), so a daily run with no new episode does not touch R2. `--force` (workflow input `force`) rewrites it anyway.
+- Fewer than `--min-segments` segments (the workflow passes 10: a Day 0 bulletin is 10, an episode 100): exit 3, R2 untouched.
+- The existing pool is read back and every segment it references is HEAD-checked (`verify_pool`). If it still verifies and loops a *newer* episode than the candidate (the newest upload is truncated, so `--from-r2` fell back to an older one), it is kept (`--force` overrides). If it points at a missing or truncated object, it is replaced by whatever complete episode exists, even an older one.
+- A missing or non-JSON pool manifest in R2 is replaced.
+- A skipped run writes the pool that stays live to `--write`, so the job summary and the `replay-pool-manifest` artifact always show what the Worker serves.
+
+### Verification (`scripts/pool_check.py`)
+
+After the publish step the workflow runs `python scripts/pool_check.py --manifest pool-manifest.json --wait 150`: it HEADs `pool/manifest.json` in R2, re-verifies every referenced segment, checks that the R2 copy lists the same segment keys as the local manifest, then polls the live Worker's `/healthz` (URL from the repo variable `WORKER_URL`, else the host of `streamUrl` in `site/config.json`) until `pool.ok` is true with this run's `built_at` (the Worker's pool cache is 60 s). An unusable pool fails the job; a usable pool with another `built_at` (another isolate) is only a warning. The last `/healthz` body goes into the job summary and the artifact (`healthz.json`). Without the `R2_*` secrets the whole job is a warning and exit 0. The script also runs by hand with the `R2_*` env and `--url`.
+
+Seeded on 2026-11-06 by run 42222599138 (`source=r2`, `max_blocks=2`, 51 s): `pool/manifest.json` = 2 blocks, 200 segments, built from `bulletins/20261106T120928Z/` and `bulletins/20261106T115430Z/`; `/healthz` on `ai247-live` went from `pool.problem: "missing: pool/manifest.json is not in the bucket"` to `pool.ok: true` while `source` stayed `live-manifest`.
+
+Tests: `tests/test_replay_pool.py` (fake S3 client: hash checks, newest-complete selection, skip reasons, manifest-last upload order, CLI with and without secrets, the refresh guard above end to end on the CLI path, the Worker fixture `worker/test/fixtures/replay-pool.json` kept in this shape, and the generated channel playlist passing `newsbot.playlist.check_sequence_over_time`).
 
 ## Config (`worker/wrangler.toml` `[vars]`)
 
 | Var | Default | Meaning |
 |---|---|---|
 | `POOL_KEY` | `pool/manifest.json` | pool manifest key under `PREFIX` |
-| `MAX_MANIFEST_AGE_S` | `0` | stale threshold in seconds; 0 = never stale |
+| `MAX_MANIFEST_AGE_S` | `14400` | stale threshold in seconds (4 h: one missed 3-hourly `day1-episode` run plus slack); 0 = never stale |
 | `CHECK_SEGMENTS` | `5` | upcoming live segments HEADed per manifest reload; 0 = off |
 | `FAILOVER_MIN_S` | `30` | minimum time on the pool before returning |
 | `MANIFEST_TTL_MS` / `POOL_TTL_MS` | `10000` / `60000` | caches (tests pass smaller values with `--var`) |
@@ -93,4 +114,4 @@ Tests: `tests/test_replay_pool.py` (fake S3 client: hash checks, newest-complete
 - The pool manifest is not HEAD-checked by the Worker (the bootstrap verifies before publishing). If the pool itself points at deleted objects, segments 404.
 - A new `manifest.json` published *during* a failover is honoured on return (the return lands in the newest manifest's phase); its `cycle_start_dseq` anchor is still consistent because the Worker adds `dseq_offset` on top of the uploader's own count rather than rewriting it.
 - `uploaded` comes from R2 (`R2Object.uploaded`); a manifest copied with a tool that preserves nothing but the bytes still gets a fresh upload time, which is the intended meaning of "stale".
-- Not deployed; nothing here contacts anything outside R2.
+- Nothing here contacts anything outside R2 (the Worker is deployed by `deploy.yml`, see `docs/DEPLOY.md`).

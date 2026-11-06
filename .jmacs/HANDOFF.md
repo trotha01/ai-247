@@ -1,27 +1,26 @@
 # Handoff
 
 ## Objective
-AI-247: topic research stage. Claude picks and deepens topics (AI harnesses, AI for VFX, novel/newly popular AI
-areas) with dedupe against past episodes, in front of the existing Haiku writer. Branch `cloud/ai247-topics`.
+AI-247 topic research stage (docs/TOPICS.md), approved by Trevor 2026-11-06 with four changes: web-searching
+discovery (Claude API web_search tool), no per-day cap on new topics, episode history in Cloudflare D1 (not the repo),
+plan + discovery on Claude Fable 5.1 at low effort (writer/checker stay Haiku 5.5). Branch `cloud/ai247-topics`,
+PR #29. Done means: one dispatched episode plays on https://ai-247.pages.dev, measured cost in TOPICS.md, PR merged.
 
 ## Done
-- Search: read docs/PLAN.md, DAY2/DAY3/DEPLOY/FAILOVER, the handoff, all 23 PRs and 15 branches. No topic, dedupe
-  or history work existed; everything was the fixed 8-feed digest. Reused: `rank.py` decay + dedupe, `llm.py`
-  writer/checker/Meter (extended: per-model prices, cost by call kind, shared meter, `make_client`), `feeds.py`
-  fetchers (topic-specific feeds/repos), `r2.py` client (history mirror).
-- Design: `docs/TOPICS.md`. Status `waiting` with the 5-line needs_you summary was pushed first.
-- Implementation (session_01CP1hmUSnKYpb1ynFAxTpqc): `topics/topics.json`, `episodes/history.json`,
-  `newsbot/topics.py` (match, score, pick, plan call, history record CLI; calls `research.*` and
-  `discovery.propose`), `newsbot/day1.py` stage `topic_research`, `episode.py` rundown title, `summary1.py`,
-  `day1.yml` (inputs mode/topic/plan_model, `contents: write`, record-and-commit step, live playback check), ci.yml.
-- Sibling session_01CP1hmQmX5v1egwD2gQeNBy: `newsbot/research.py` (enrich primary pages; keyless arXiv / GitHub
-  search / HN leads), `newsbot/discovery.py` (proposal + deterministic gate), `tests/test_research.py`,
-  `site/test/e2e-live.js` (Playwright check of the deployed page). Both sessions rebase before pushing.
+- Survey: PLAN/DAY2/DAY3/DEPLOY/FAILOVER docs, all PRs, the sibling session's implementation (topics.py, day1 wiring,
+  day1.yml, tests; run 42229528561 produced a topic episode on agent-harnesses, Haiku cost 0.00586 USD).
+- Owned by this session since Trevor's approval: newsbot/discovery.py (Fable 5.1 + web_search_20260209, primary-link
+  gate, no daily cap), newsbot/history_db.py (D1 via REST, bound params, auth error names the permission),
+  newsbot/topics.py (D1-first history, R2 mirror as read cache, plan on Fable low, discovery after the writer),
+  newsbot/llm.py (Fable prices, web-search billing, cap 0.75), worker (D1 binding, migration, /history.json + test),
+  deploy.yml (D1 lookup/create/migrate, non-fatal), day1.yml (Cloudflare secrets, plan_model default Fable, only
+  topics.json committed back), docs (TOPICS.md rewritten, DEPLOY.md, README), tests (99 Python + 73 Worker pass).
+- episodes/history.json removed from the repo and git-ignored; main merged into the branch (PR #29 was dirty).
 
 ## Pending
-- Dispatch day1-episode on the branch (mode=topic) and verify the episode plays on ai-247.pages.dev.
-- PR, ci green, merge to main. Report measured cost per episode.
-- Trevor: approve design + per-day spend (docs/TOPICS.md).
+- Dispatch day1-episode on the branch (mode=topic), read measured cost by kind, fill TOPICS.md "Measured run".
+- Confirm D1 works with the current CLOUDFLARE_API_TOKEN; if it lacks Account -> D1 -> Edit, status needs_you.
+- Playback proof (e2e-live.js step output), ci + claude-review green, merge PR #29, final status.
 
 ## Next step
-Push the rebased implementation, open the PR, dispatch the workflow, run e2e-live.js against the live site.
+Push, dispatch the run via the REST API, wait for it, then update docs/status and merge.
