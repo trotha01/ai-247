@@ -216,7 +216,7 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     assert r["history_backend"] == "file" and r["d1_written"] is False and (tmp_path / "history.json").exists()   # artifact snapshot
     # same run recorded twice: one entry; the same topic id is not appended twice (there is no daily cap any more)
     topics.record(tmp_path, run_id="4242", now=NOW)
-    assert len(json.loads((tmp_path / "episodes/history.json").read_text())["episodes"]) == 1 and len(json.loads((tmp_path / "topics/topics.json").read_text())["topics"]) == 3
+    assert len(json.loads((tmp_path / "episodes/history.json").read_text())["episodes"]) == 1 and len(json.loads((tmp_path / "topics/topics.json").read_text())["topics"]) == len(c2["topics"])
     # next run: the covered URLs are excluded and the topic is blocked (aired 0 episodes ago, no new items)
     t, scores, _ = topics.pick(topics.load_topics(), its, topics.load_history(), NOW + 60)
     assert {s["id"]: s for s in scores}["agent-harnesses"]["blocked"]

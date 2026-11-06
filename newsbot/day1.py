@@ -102,7 +102,8 @@ def main(argv=None) -> int:
                 ranked = rank.rank(items, N_RUNDOWN, now)
         (ep / "rank.json").write_text(json.dumps(rank.explain(ranked, now), indent=1))
         print(f"rundown: {len(ranked)} stories from {len({i.source for i in ranked})} sources; topic: {tr['info'].get('topic')}")
-        if len(ranked) < 6:
+        # topic mode may air 5 stories (min_items); the general rundown needs 6. After the fallback above tr["ranked"] is None.
+        if len(ranked) < (5 if tr["ranked"] is not None else 6):
             print("not enough rankable items", file=sys.stderr)
             return 2
 

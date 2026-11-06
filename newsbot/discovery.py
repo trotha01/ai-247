@@ -126,7 +126,7 @@ def validate(cand, items, topics_doc: dict, today: str, found: dict | None = Non
     reason = re.sub(r"\s+", " ", str(cand.get("reason", ""))).strip()[:200]
     desc = re.sub(r"\s+", " ", str(cand.get("description", ""))).strip()[:300]
     raw_links = [str(u).strip() for u in (cand.get("links") or []) if str(u).strip()]
-    links = list(dict.fromkeys(u for u in raw_links if primary_link(u) and (u in found or not found)))[:MAX_LINKS]
+    links = list(dict.fromkeys(u for u in raw_links if primary_link(u) and u in found))[:MAX_LINKS]   # seen URLs only
     if not _SLUG.match(tid) or len(tid) > 40 or not (3 <= len(name) <= 60):
         return None, "bad id or name"
     if len(kws) < 3:

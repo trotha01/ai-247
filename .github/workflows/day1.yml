@@ -10,8 +10,9 @@ name: day1-episode
 # Claude Haiku writer ON when the ANTHROPIC_API_KEY secret exists (extractive script otherwise), plan + discovery on
 # Claude Fable 5.1 at low effort. The per-run Claude cap (NEWSBOT_MAX_RUN_USD, 0.75 USD, repo variable overrides) is
 # a preflight guard: a call that could cross it is not made, the rest of the rundown goes extractive and
-# `budget_abort` is recorded, so the cap never fails a run. Expected 0.15-0.30 USD per episode, i.e. 1.2-2.4 USD/day
-# on this cron (docs/TOPICS.md "Cost"); plan_model=claude-haiku-5-5 brings it back to ~0.01 USD per episode.
+# `budget_abort` is recorded, so the cap never fails a run. MEASURED 0.32 USD per episode (run 42238216216: discovery
+# 0.29, plan 0.02, Haiku writer 0.005), i.e. about 2.6 USD/day on this cron, ~77 USD/month (docs/TOPICS.md "Cost");
+# plan_model=claude-haiku-5-5 (or repo variable NEWSBOT_DISCOVERY_SEARCHES=1) brings it down, see TOPICS.md levers.
 on:
   workflow_dispatch:
     inputs:
@@ -156,7 +157,7 @@ jobs:
         run: cat out1/report.json | head -c 6000 || true
 
       - name: Tests (Day 1 units + seam on the real render)
-        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py tests/test_research.py
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py tests/test_research.py tests/test_history_db.py
 
       - name: Publish to R2 (segments first, root manifest.json last; skipped without the R2 secrets)
         # Only after the render passed its tests. Layout: docs/R2_LAYOUT.md (B) + docs/MANIFEST-SWAP.md.
