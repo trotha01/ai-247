@@ -83,10 +83,12 @@ jobs:
           cache-dependency-path: worker/package-lock.json
       - run: npm ci
       - name: Worker tests (unit + wrangler dev --local)
+        # The hermetic gate. The uploader-layout e2e (test/e2e, needs ffmpeg + the Python uploader) and the
+        # browser e2e already run on every push to main in ci.yml (worker-site-e2e).
         env:
           CI: "1"
           WRANGLER_SEND_METRICS: "false"
-        run: npm test
+        run: npm run test:unit && npm run test:dev
 
   deploy-worker:
     needs: [changes, test-worker]
