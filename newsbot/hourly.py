@@ -41,12 +41,28 @@ AIRED_MANIFESTS = 150    # newest per-bulletin manifests read for the aired-URL 
 
 
 # ---------------------------------------------------------------- aired memory ---------------------------------
+def bulletin_manifest_keys(s3, bucket: str, prefix: str = replay_pool.BULLETIN_PREFIX) -> list[str]:
+    """`bulletins/<id>/manifest.json` keys, newest first, from a delimiter listing of the `bulletins/<id>/` prefixes
+    only (one page per 1000 bulletins), not of every segment object ever published."""
+    ids, token = [], None
+    while True:
+        kw = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
+        if token:
+            kw["ContinuationToken"] = token
+        r = s3.list_objects_v2(**kw)
+        ids += [c["Prefix"] for c in r.get("CommonPrefixes", [])]
+        if not r.get("IsTruncated"):
+            break
+        token = r.get("NextContinuationToken")
+    return [f"{p}manifest.json" for p in sorted(ids, reverse=True)]
+
+
 def aired_urls(s3, bucket: str, max_manifests: int = AIRED_MANIFESTS, threads: int = 8) -> tuple[dict[str, str], dict]:
     """url -> id of the newest bulletin that aired it, from `sources` of the newest bulletins/<id>/manifest.json in R2.
     Returns ({}, report) with the error named when R2 cannot be read; nothing here fails a run."""
     report = {"ok": False, "manifests_read": 0, "urls": 0, "error": None}
     try:
-        keys = replay_pool.candidate_manifests(s3, bucket)[:max_manifests]
+        keys = bulletin_manifest_keys(s3, bucket)[:max_manifests]
     except Exception as e:
         report["error"] = f"{type(e).__name__}: {str(e)[:120]}"
         return {}, report
@@ -160,7 +176,7 @@ def summary_markdown(plan_dir: Path, bulletin_dirs: list[Path]) -> str:
            f"{p['never_aired']} never aired before, {p['aired_known']} aired earlier (aired memory: {p.get('aired_store', {})})",
            f"- Aired sentences: {sentences}; Claude cost this run: **{cost:.4f} USD** (per-slice cap 0.05 USD; LLM slices per run set by HOURLY_LLM_SLICES)"]
     if pub:
-        out.append(f"- Published: `{pub['prefix']}` (+{pub['fresh_blocks'] - 1} more), {pub['objects']} objects / {pub['bytes']} bytes, "
+        out.append(f"- Published: {pub['fresh_blocks']} fresh block(s) starting at `{pub['prefix']}`, {pub['objects']} objects / {pub['bytes']} bytes, "
                    f"root manifest `cycle_start_k` {pub['cycle_start_k']}, `loop_from` {pub['loop_from']}, fresh {pub['fresh_minutes']} min, "
                    f"blocks {[(k, n) for k, _, n in pub['blocks']]}, inherited pending blocks {pub['inherited_blocks']}")
     else:

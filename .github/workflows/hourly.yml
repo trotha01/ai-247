@@ -84,6 +84,7 @@ jobs:
       - name: Plan the slices (one feed fetch, aired-URL memory from R2)
         id: plan
         # R2 secrets are read by boto3 from the environment (never printed); without them the aired memory is skipped.
+        # GITHUB_TOKEN is read by newsbot/feeds.py for the GitHub releases API (rate limit), as in day1.yml.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -147,7 +148,7 @@ jobs:
           # The Claude key is only handed to the first LLM_SLICES slices (read by the SDK from the environment, never
           # echoed); the other slices run the extractive script (NEWSBOT_NO_LLM) and cost nothing.
           ANTHROPIC_API_KEY: ${{ matrix.slice < fromJSON(env.LLM_SLICES) && secrets.ANTHROPIC_API_KEY || '' }}
-          NEWSBOT_NO_LLM: ${{ matrix.slice < fromJSON(env.LLM_SLICES) && '' || '1' }}
+          NEWSBOT_NO_LLM: ${{ matrix.slice >= fromJSON(env.LLM_SLICES) && '1' || '' }}
           NEWSBOT_PER_SOURCE_CAP: "4"     # the planner already mixed sources per slice (<= 4 each)
           NEWSBOT_TOPIC_MODE: "off"       # the topic research stage (PR #29) is not run per slice; it has its own budget
         run: |

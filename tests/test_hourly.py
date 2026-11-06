@@ -29,8 +29,14 @@ class FakeS3:
     def __init__(self, objects):
         self.objects = objects
 
-    def list_objects_v2(self, Bucket, Prefix, ContinuationToken=None):
-        return {"Contents": [{"Key": k} for k in sorted(self.objects) if k.startswith(Prefix)], "IsTruncated": False}
+    def list_objects_v2(self, Bucket, Prefix, Delimiter=None, ContinuationToken=None):
+        keys = [k for k in sorted(self.objects) if k.startswith(Prefix)]
+        if Delimiter is None:
+            return {"Contents": [{"Key": k} for k in keys], "IsTruncated": False}
+        # a delimiter listing returns the objects directly under Prefix and the common prefixes one level down
+        pre = sorted({Prefix + k[len(Prefix):].split(Delimiter)[0] + Delimiter for k in keys if Delimiter in k[len(Prefix):]})
+        return {"Contents": [{"Key": k} for k in keys if Delimiter not in k[len(Prefix):]],
+                "CommonPrefixes": [{"Prefix": p} for p in pre], "IsTruncated": False}
 
     def get_object(self, Bucket, Key):
         if Key == "bulletins/20261106T130000Z-01/manifest.json":
@@ -46,6 +52,7 @@ def test_aired_urls_newest_airing_wins_and_errors_are_reported():
         "bulletins/20261106T130000Z-01/manifest.json": {"sources": [{"url": "https://x.test/z"}]},
         "bulletins/20261106T130000Z-00/slate/manifest.json": {"segments": []},  # not a bulletin manifest (deeper key)
     })
+    assert hourly.bulletin_manifest_keys(s3, "bkt") == ["bulletins/20261106T130000Z-01/manifest.json", "bulletins/20261106T130000Z-00/manifest.json", "bulletins/20261106T120000Z/manifest.json"]
     aired, rep = hourly.aired_urls(s3, "bkt")
     assert aired == {"https://x.test/a": "20261106T120000Z", "https://x.test/b": "20261106T130000Z-00", "https://x.test/c": "20261106T130000Z-00"}
     assert rep["ok"] and rep["manifests_read"] == 2 and rep["urls"] == 3
