@@ -1,1 +1,1 @@
-{"state":"running","msg":"Steps 1-4 landed via PR #24 and verified (/healthz live-manifest, max_age_s 14400, pool.ok). Follow-up PR #28 open (post-publish verification + guard hardening); waiting for ci + claude-review, then merge"}
+{"state": "waiting", "msg": "PR #25 (replay-fetch fix + cron docs) merged to main as 5ab227c at ~13:17Z; PR #14 closed as superseded. Waiting for the 15:23Z scheduled day1-episode run to prove the cron, then PLAN.md note."}
