@@ -200,6 +200,18 @@ Cheapest path that meets the rule with the tested 10-minute unit (test suite, 60
 
 The 8-14 feeds supply about 110-200 items (now up to 60 arXiv items per fetch) and refresh by a few items per hour, while 60 minutes of bulletins need about 60-70 stories (Haiku, 3-5 sentences each) or more (extractive). The planner therefore spends the never-aired stories first, spread over the hour's slices, and fills the rest with the stories aired longest ago, re-narrated and re-rendered; the job summary counts `never aired` per slice. Genuinely new content per hour needs more source text (PR #29's research stage reads primary pages; more feeds), which is outside this item.
 
-### Verification run
+### Verification runs
 
-_Filled in after the first `workflow_dispatch` of `hourly-bulletins` on `main` (the workflow must be on the default branch before it can be dispatched)._
+**Run 1: 42252356577** (`workflow_dispatch` on `main` 9d5ec65, 16:26:13Z, defaults: 6 slices, `HOURLY_LLM_SLICES` 1). Whole run 14 min (16:26:13 to 16:40:11Z).
+
+| Stage | Measured |
+|---|---|
+| plan | 17 s job: install 3 s, fetch 200 items from 12 working feeds in 6.8 s (Google DeepMind and llama.cpp returned no items), aired memory 6 manifests / 20 URLs in 1.4 s, 142 candidates, **128 never aired**, 6 slices x 14 stories (6-7 sources each, <= 4 per source), run_ts `20261106T162623Z` |
+| render x 6 (parallel) | install 31-75 s; render step 8 min 12 s to 11 min 49 s (pipeline 492 s on slice 1: TTS+plan 207 s, render+encode 268 s at 68 fps incl. encode; 52-65 fps on the slower runners, six encodes ran at once); tests 11-15 s; artifact 31 MB per slice. Every rendered bulletin was 600.0 s / 100 segments with 100% supported and grounded sentences (slice 1: 11 stories, 30 sentences, 15.5 s pad). |
+| what went wrong | slices 0, 2, 3 failed only `test_rundown_10_to_12_stories` with **9 stories** (the Day 1 floor; the longer arXiv abstracts and release notes make a story about 70 s, so 9 fill 600 s), so three complete bulletins were not published; slice 5 hit the known install stall (step timeout after 8 min, before any render). |
+| stitch | download 4 s; **publish 22.3 s for 209 objects / 67.6 MB** (12 parallel uploads; 108 objects took 91-144 s sequentially before); root manifest `cycle_start_k` 163981 (the loop boundary of the legacy manifest then live = 16:51:26Z), `cycle_start_dseq` 41, `loop_from` 2, blocks [bulletin x2, slate, replay x4 (150835Z, 144236Z, 140715Z, 120928Z)], `rendered_minutes` 20.0 -> `::warning::` (target 60); `/healthz` ok, `source=live-manifest`, `manifest.uploaded` 16:40:04Z, 605 segments / 7 blocks |
+| coverage | **20 min of new footage: below the target**, because of the floor above, not the pipeline. Fix: `NEWSBOT_MIN_STORIES` (default 10 keeps day1-episode as it was; the hourly slices pass 6). |
+| cost | slice 0 was the Haiku slice and was rejected by the floor; the published bulletins were extractive (0 USD). |
+| cron | the file reached `main` at 15:47Z; the 16:23Z slot produced no run (the Day 1 cron also missed its first slot). Watch 17:23Z. |
+
+**Run 2** (dispatched from `cloud/ai247-coverage` with the floor fix, 16:45Z): _numbers below._
