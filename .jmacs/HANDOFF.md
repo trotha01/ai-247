@@ -14,4 +14,4 @@ AI-247: protect `main`, add a PR check + Claude review workflow, and report Mych
 - Mychal's access: collaborator endpoints are blocked for this session (proxy 403), so neither checked nor changed. Trevor decides and invites.
 
 ## Next step
-Push, open the PR, watch checks.
+PR #26 open; merge when ci is green, then apply the ruleset and open the proof PR.
