@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import dataclasses
 import html as _html
+import ipaddress
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -44,6 +46,47 @@ _BLOCK = re.compile(r"</?(p|div|br|li|h[1-6]|tr|section|blockquote|pre)[^>]*>", 
 
 
 # ----------------------------------------------------------------------------------------------- primary pages
+def public_url(url: str, resolve=None) -> str:
+    """'' if the URL may be fetched, else why not: http(s) only, a hostname (not an IP literal) whose every resolved
+    address is public (no loopback, private, link-local, multicast or reserved ranges). Guards the page fetcher, whose
+    URLs come from web search results and HN leads."""
+    try:
+        parts = urlsplit(url)
+    except Exception:
+        return "bad url"
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return "not http(s)"
+    host = parts.hostname.lower()
+    if host in ("localhost",) or host.endswith((".local", ".internal", ".localhost")):
+        return "local host name"
+    try:
+        ipaddress.ip_address(host)
+        return "IP literal"
+    except ValueError:
+        pass
+    try:
+        infos = (resolve or socket.getaddrinfo)(host, parts.port or (443 if parts.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+    except Exception as e:
+        return f"unresolvable host ({type(e).__name__})"
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if not ip.is_global:
+            return f"non-public address ({'private' if ip.is_private else 'reserved'})"
+    return ""
+
+
+class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
+    """Every redirect target goes through public_url() too (a public page may redirect to a private address)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        why = public_url(newurl)
+        if why:
+            raise urllib.error.HTTPError(newurl, 403, f"redirect refused: {why}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_CheckedRedirect())
+
+
 def extract_text(page: str) -> str:
     """Readable text of an HTML page: <article>/<main> if present, boilerplate tags dropped, paragraphs joined."""
     page = _DROP.sub(" ", page)
@@ -73,12 +116,15 @@ def fetch_page(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_BYTES) -
     """Return (text, note). note is '' on success, otherwise why nothing was fetched. Never raises."""
     if url.lower().split("?")[0].endswith(SKIP_SUFFIXES):
         return "", "skipped: not an HTML page"
+    why = public_url(url)
+    if why:
+        return "", f"refused: {why}"
     robots = feeds.robots_allows(url, timeout=min(timeout, 10.0))
     if robots == "disallowed":
         return "", "robots.txt disallows"
     req = urllib.request.Request(url, headers={"User-Agent": feeds.UA, "Accept": "text/html, application/xhtml+xml, text/plain;q=0.8, */*;q=0.1"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _OPENER.open(req, timeout=timeout) as r:
             ctype = (r.headers.get("Content-Type") or "").lower()
             if not any(t in ctype for t in TEXT_TYPES):
                 return "", f"skipped: content type {ctype.split(';')[0] or 'unknown'}"

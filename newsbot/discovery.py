@@ -119,13 +119,15 @@ def validate(cand, items, topics_doc: dict, today: str, found: dict | None = Non
     found = found if found is not None else {}
     if not isinstance(cand, dict):
         return None, "no proposal"
-    tid, name = str(cand.get("id", "")).strip().lower(), str(cand.get("name", "")).strip()
-    kws = [str(k).strip().lower() for k in cand.get("keywords", []) if str(k).strip()]
+    def _strs(v, n):
+        return [str(x).strip() for x in (v if isinstance(v, list) else []) if str(x).strip()][:n]   # null / non-list -> []
+    tid, name = str(cand.get("id") or "").strip().lower(), str(cand.get("name") or "").strip()
+    kws = [k.lower() for k in _strs(cand.get("keywords"), 40)]
     kws = list(dict.fromkeys(k for k in kws if 2 <= len(k) <= 40))[:15]
-    qs = [str(q).strip() for q in cand.get("queries", []) if str(q).strip()][:4]
-    reason = re.sub(r"\s+", " ", str(cand.get("reason", ""))).strip()[:200]
-    desc = re.sub(r"\s+", " ", str(cand.get("description", ""))).strip()[:300]
-    raw_links = [str(u).strip() for u in (cand.get("links") or []) if str(u).strip()]
+    qs = _strs(cand.get("queries"), 4)
+    reason = re.sub(r"\s+", " ", str(cand.get("reason") or "")).strip()[:200]
+    desc = re.sub(r"\s+", " ", str(cand.get("description") or "")).strip()[:300]
+    raw_links = _strs(cand.get("links"), 20)
     links = list(dict.fromkeys(u for u in raw_links if primary_link(u) and u in found))[:MAX_LINKS]   # seen URLs only
     if not _SLUG.match(tid) or len(tid) > 40 or not (3 <= len(name) <= 60):
         return None, "bad id or name"
@@ -142,6 +144,27 @@ def validate(cand, items, topics_doc: dict, today: str, found: dict | None = Non
         return None, f"only {hits} matching items/links (need {MIN_HITS}; {len(raw_links)} links offered, {len(links)} primary and seen)"
     entry["reason"] = f"{entry['reason']} ({hits} matching items/links on {today})"
     return entry, "ok"
+
+
+def sanitize_entry(entry) -> dict | None:
+    """Re-check a discovered topic entry read back from the render job's artifact before it is stored (the record job
+    trusts nothing it did not validate itself): field shapes, slug, lengths, primary links only. None if unusable."""
+    if not isinstance(entry, dict):
+        return None
+    tid, name = str(entry.get("id") or "").strip().lower(), str(entry.get("name") or "").strip()
+    if not _SLUG.match(tid) or len(tid) > 40 or not (3 <= len(name) <= 60):
+        return None
+    kws = [str(k).strip().lower() for k in (entry.get("keywords") if isinstance(entry.get("keywords"), list) else []) if str(k).strip()]
+    kws = list(dict.fromkeys(k for k in kws if 2 <= len(k) <= 40))[:15]
+    if len(kws) < 3:
+        return None
+    qs = [str(q).strip() for q in (entry.get("queries") if isinstance(entry.get("queries"), list) else []) if str(q).strip()][:4]
+    urls = [str(u).strip() for u in (entry.get("seed_urls") if isinstance(entry.get("seed_urls"), list) else []) if str(u).strip()]
+    urls = [u for u in urls if primary_link(u)][:MAX_LINKS]
+    added = str(entry.get("added") or "")[:10]
+    return {"id": tid, "name": name, "lane": "discovered", "description": re.sub(r"\s+", " ", str(entry.get("description") or "")).strip()[:300],
+            "keywords": kws, "queries": qs or [name], "sources": [], "seed_urls": urls, "enabled": True,
+            "added": added if re.match(r"^\d{4}-\d{2}-\d{2}$", added) else "", "reason": re.sub(r"\s+", " ", str(entry.get("reason") or "")).strip()[:260]}
 
 
 def _search_tool(kind: str) -> dict:
@@ -212,7 +235,10 @@ def propose(client, meter, items, topics_doc: dict, today: str, log=print):
         log("discovery: reply was not JSON; no new topic")
         return None
     found.update({it.url: it.title for it in items if it.url})
-    entry, why = validate(reply.get("topic"), items, topics_doc, today, found)
+    try:
+        entry, why = validate(reply.get("topic") if isinstance(reply, dict) else None, items, topics_doc, today, found)
+    except Exception as e:   # anything odd in the model's JSON yields no topic, never a failed episode
+        entry, why = None, f"malformed proposal ({type(e).__name__})"
     log(f"discovery: {'added ' + entry['id'] if entry else 'no new topic'} ({why}); {len(found)} candidate URLs seen, "
         f"{getattr(meter, 'searches', 0)} web searches so far")
     return entry

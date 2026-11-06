@@ -465,7 +465,9 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
             result.update(needs_you=e.needs_you, history_backend=HISTORY_STATUS["backend"])
             print(f"history: D1 write failed: {e}")
     d = pick_info.get("discovery") or {}
-    entry_t = d.get("entry") if d.get("accepted") else None
+    entry_t = discovery.sanitize_entry(d.get("entry")) if d.get("accepted") else None   # re-checked here: the artifact is not trusted
+    if d.get("accepted") and not entry_t:
+        print("topics: discovered entry in the artifact failed re-validation; not stored")
     if entry_t:   # gated at run time against this run's items and web results (discovery.validate); no daily cap
         cfg = load_topics()
         today = ts[:10]

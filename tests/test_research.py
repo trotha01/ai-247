@@ -97,6 +97,24 @@ def test_fetch_page_skips_pdfs_without_touching_network():
     assert research.fetch_page("https://arxiv.org/pdf/2611.01234v1.pdf") == ("", "skipped: not an HTML page")
 
 
+def test_fetch_page_refuses_private_hosts_ip_literals_and_non_http(monkeypatch):
+    fake_dns = {"intranet.example": "10.0.0.5", "loop.example": "127.0.0.1", "link.example": "169.254.1.1", "public.example": "93.184.216.34"}
+
+    def resolve(host, port, proto=0):
+        if host not in fake_dns:
+            raise OSError("no such host")
+        return [(2, 1, 6, "", (fake_dns[host], port))]
+    assert research.public_url("http://intranet.example/x", resolve).startswith("non-public")
+    assert research.public_url("https://loop.example/", resolve).startswith("non-public")
+    assert research.public_url("https://link.example/", resolve).startswith("non-public")
+    assert research.public_url("https://public.example/page", resolve) == ""
+    assert research.public_url("https://127.0.0.1/", resolve) == "IP literal" and research.public_url("https://[::1]/", resolve) == "IP literal"
+    assert research.public_url("ftp://public.example/", resolve) == "not http(s)" and research.public_url("https://localhost/", resolve) == "local host name"
+    assert research.public_url("https://nope.example/", resolve).startswith("unresolvable")
+    monkeypatch.setattr(research.socket, "getaddrinfo", resolve)
+    assert research.fetch_page("http://intranet.example/x") == ("", "refused: non-public address (private)")
+
+
 # ---------------------------------------------------------------- keyless web APIs
 def test_parse_arxiv_cites_abstract_page_not_pdf():
     its = research.parse_arxiv(ARXIV)
@@ -184,6 +202,20 @@ def test_discovery_uses_fable_with_web_search_and_keeps_only_seen_primary_links(
     assert kw["tools"] == [{"type": "web_search_20260209", "name": "web_search", "max_uses": discovery.MAX_SEARCHES}]
     assert meter.calls == 1 and meter.searches == 2 and round(meter.usd, 6) == round((900 * 10 + 150 * 50) / 1e6 + 0.02, 6)
     assert kw["system"] == discovery.DISCOVERY_SYS and "CURRENT TOPICS" in kw["messages"][0]["content"]
+
+
+def test_discovery_null_fields_and_malformed_shapes_never_raise():
+    nulls = {"topic": {"id": "x-y", "name": "Some area", "keywords": None, "queries": None, "links": None, "reason": None, "description": None}}
+    assert discovery.propose(Scripted(json.dumps(nulls)), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
+    assert discovery.propose(Scripted('{"topic": "just a string"}'), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
+    assert discovery.propose(Scripted('[1, 2, 3]'), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
+    assert discovery.validate({"id": "a-b", "name": "Abc", "keywords": "not a list"}, ITEMS, TOPICS, "2026-11-06", {}) == (None, "too few keywords")
+    # record-side re-validation of an artifact entry
+    good = discovery.sanitize_entry({"id": "robot-world-models", "name": "World models for robotics", "keywords": ["world model", "robot", "sim"],
+                                     "seed_urls": ["https://arxiv.org/abs/1", "https://news.ycombinator.com/item?id=1", 5], "added": "2026-11-06", "lane": "seed", "enabled": False})
+    assert good["seed_urls"] == ["https://arxiv.org/abs/1"] and good["lane"] == "discovered" and good["enabled"] is True and good["queries"] == ["World models for robotics"]
+    assert discovery.sanitize_entry({"id": "Bad Id", "name": "x", "keywords": ["a", "b", "c"]}) is None
+    assert discovery.sanitize_entry({"id": "ok-id", "name": "Name here", "keywords": None}) is None and discovery.sanitize_entry("nope") is None
 
 
 def test_discovery_falls_back_to_basic_search_tool_on_400_and_handles_refusal_and_garbage():
