@@ -210,6 +210,42 @@ Cheapest path that meets the rule with the tested 10-minute unit (test suite, 60
 
 The 8-14 feeds supply about 110-200 items (now up to 60 arXiv items per fetch) and refresh by a few items per hour, while 60 minutes of bulletins need about 60-70 stories (Haiku, 3-5 sentences each) or more (extractive). The planner therefore spends the never-aired stories first, spread over the hour's slices, and fills the rest with the stories aired longest ago, re-narrated and re-rendered; the job summary counts `never aired` per slice. Genuinely new content per hour needs more source text (PR #29's research stage reads primary pages; more feeds), which is outside this item.
 
-### Verification run
+### Verification runs
 
-_Filled in after the first `workflow_dispatch` of `hourly-bulletins` on `main` (the workflow must be on the default branch before it can be dispatched)._
+**Run 1: 42252356577** (`workflow_dispatch` on `main` 9d5ec65, 16:26:13Z, defaults: 6 slices, `HOURLY_LLM_SLICES` 1). Whole run 14 min (16:26:13 to 16:40:11Z).
+
+| Stage | Measured |
+|---|---|
+| plan | 17 s job: install 3 s, fetch 200 items from 12 working feeds in 6.8 s (Google DeepMind and llama.cpp returned no items), aired memory 6 manifests / 20 URLs in 1.4 s, 142 candidates, **128 never aired**, 6 slices x 14 stories (6-7 sources each, <= 4 per source), run_ts `20261106T162623Z` |
+| render x 6 (parallel) | install 31-75 s; render step 8 min 12 s to 11 min 49 s (pipeline 492 s on slice 1: TTS+plan 207 s, render+encode 268 s at 68 fps incl. encode; 52-65 fps on the slower runners, six encodes ran at once); tests 11-15 s; artifact 31 MB per slice. Every rendered bulletin was 600.0 s / 100 segments with 100% supported and grounded sentences (slice 1: 11 stories, 30 sentences, 15.5 s pad). |
+| what went wrong | slices 0, 2, 3 failed only `test_rundown_10_to_12_stories` with **9 stories** (the Day 1 floor; the longer arXiv abstracts and release notes make a story about 70 s, so 9 fill 600 s), so three complete bulletins were not published; slice 5 hit the known install stall (step timeout after 8 min, before any render). |
+| stitch | download 4 s; **publish 22.3 s for 209 objects / 67.6 MB** (12 parallel uploads; 108 objects took 91-144 s sequentially before); root manifest `cycle_start_k` 163981 (the loop boundary of the legacy manifest then live = 16:51:26Z), `cycle_start_dseq` 41, `loop_from` 2, blocks [bulletin x2, slate, replay x4 (150835Z, 144236Z, 140715Z, 120928Z)], `rendered_minutes` 20.0 -> `::warning::` (target 60); `/healthz` ok, `source=live-manifest`, `manifest.uploaded` 16:40:04Z, 605 segments / 7 blocks |
+| coverage | **20 min of new footage: below the target**, because of the floor above, not the pipeline. Fix: `NEWSBOT_MIN_STORIES` (default 10 keeps day1-episode as it was; the hourly slices pass 6). |
+| cost | slice 0 was the Haiku slice and was rejected by the floor; the published bulletins were extractive (0 USD). |
+| cron | the file reached `main` at 15:47Z; the 16:23Z slot produced no run (the Day 1 cron also missed its first slot). Watch 17:23Z. |
+
+**Run 2: 42255030016** (`workflow_dispatch` from `cloud/ai247-coverage` a8f24ef with the floor fix, 16:43:31Z to 16:56:40Z, 13 min).
+
+| Stage | Measured |
+|---|---|
+| plan | 20 s job; the aired memory now knew run 1's stories (it read 8 manifests), 6 slices again |
+| render x 6 | slices 0, 3, 5: install 31-40 s, render 6 min 10 s to 10 min 44 s, **all tests passed with the floor of 6** (slice 3 had passed the old floor too); slices 1, 2, 4: **install stall** again. In slice 2's log apt took 3 min 13 s (16:44:05 to 16:47:18) and `pip install` then printed nothing for 5 min until the 8-minute step timeout, so no second attempt ever ran. |
+| stitch | 3 bulletins, **310 objects / 96.8 MB in 40.0 s**; root manifest `cycle_start_k` **164181 = run 1's fresh end (163981 + 200)**, i.e. the swap rule let run 1's two bulletins finish before run 2's three start; `cycle_start_dseq` 43, `loop_from` 3, 10 blocks (3 fresh, slate, 6 replays incl. run 1's two bulletins), `rendered_minutes` 30.0 -> `::warning::`; `/healthz` 905 segments / 10 blocks, uploaded 16:56:37Z |
+| coverage | **30 min**: the floor fix worked, the install stall took the other three slices. Fix: install step 20 min with every stage bounded (apt 120 s each, pip 200 s with a 20 s socket timeout and 2 retries) so a second and third attempt always fit; render job 50 min; the same guard in `ci.yml`'s two install steps, which stalled three times today as well. |
+| on air | run 1's swap verified from this session at 16:51:33Z: media sequence 163978 continuous, `EXT-X-DISCONTINUITY-SEQUENCE` 41 = the published anchor, the last three replay segments then `20261106T162623Z-00/seg_000.ts`; headless Chromium on https://ai-247.pages.dev played through it (state `live`, 12.0 s of video in 12 s, segments from both prefixes fetched with 200, 0 errors). |
+
+**Run 3: 42256733605** (`workflow_dispatch` from `cloud/ai247-coverage` fd38108 with the install fix; queued 16:54:40Z behind run 2 in the shared concurrency group, started 16:56:44Z, done 17:11:38Z: **15 min**).
+
+| Stage | Measured |
+|---|---|
+| plan | 20 s; 6 slices |
+| render x 6 | **all six succeeded**: install 35-46 s on every job (no stall this time; the fix only mattered for the budget), render step 9 min 41 s to 11 min 41 s, tests 15-17 s. Slice 0 (the Haiku slice): 12 stories written, 8 aired (long sources), 36 sentences, 100% supported and grounded, 26 calls, **0.00583 USD** (write 0.0022, check 0.0036, repair 0.0001), pipeline 700 s (script 41 s, TTS+plan 282 s, render+encode 353 s at 51.7 fps incl. encode on an AMD EPYC 9V74 runner). Slices 1-5 extractive, 0 USD. |
+| stitch | download 10 s; **6 bulletins, 613 objects / 195 MB published in 80.3 s**; the manifest in R2 (run 2's) had not started yet (its start 164181 = 17:11:26Z, publish at 17:10:13Z), so its 3 fresh blocks were **inherited** in front of ours: `cycle_start_k` 164181, `cycle_start_dseq` 43, `loop_from` 9, 16 blocks (9 fresh = 90 min, slate, 6 replays), `rendered_minutes` **60.0** -> coverage check passed, no warning; `/healthz` 1505 segments / 16 blocks, uploaded 17:11:31Z |
+| on air | at 17:12:38Z the playlist was at media sequence 164189, `EXT-X-DISCONTINUITY-SEQUENCE` 44, playing `20261106T164342Z-00/seg_008..012` (run 2's first bulletin, started on schedule at 164181 under the new manifest); headless Chromium on pages.dev: state `live`, 12.0 s of video in 12 s, 5 segments of that prefix fetched with 200, 0 errors |
+| cost | 0.00583 USD for the run (one Haiku slice): **0.14 USD/day, 4.2 USD/month at 24 runs**, inside the 10 USD monthly limit |
+
+### Result
+
+Trevor's rule holds on the run with the fixes: **60 min of new footage per hourly run** in 15 min of wall-clock (plan 20 s, six 10-minute renders in parallel 10-12 min each, stitch 1.5 min), published in one root manifest that the Worker plays fresh-first; two earlier runs showed the two failure modes (the Day 1 story floor and the install stall) and both are fixed in PR #34. The feed supply still does not give 60 min of never-aired stories per hour (see "Honest limit"): run 1 had 128 never-aired candidates right after the switch, later hours will mostly re-narrate the stories aired longest ago until more source text is added.
+
+Cron: the `hourly-bulletins` file reached `main` at 15:47Z; the 16:23Z slot produced no run. The next slots are the standing proof (the Trigger step prints `event=schedule`); the stale-manifest failover (4 h) and the replay loop inside each manifest cover a missed hour without going dark.
