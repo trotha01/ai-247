@@ -151,6 +151,7 @@ jobs:
           NEWSBOT_NO_LLM: ${{ matrix.slice >= fromJSON(env.LLM_SLICES) && '1' || '' }}
           NEWSBOT_PER_SOURCE_CAP: "4"     # the planner already mixed sources per slice (<= 4 each)
           NEWSBOT_TOPIC_MODE: "off"       # the topic research stage (PR #29) is not run per slice; it has its own budget
+          NEWSBOT_MAX_RUN_USD: "0.05"     # Haiku-only slice: keep the original per-process cap (the code default is 0.75 for topic episodes)
         run: |
           start=$SECONDS
           python -m newsbot.day1 --out out1 --items-json "plan/slice_${{ matrix.slice }}.json" ${{ inputs.tts != '' && format('--tts {0}', inputs.tts) || '' }}

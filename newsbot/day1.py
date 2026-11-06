@@ -81,8 +81,15 @@ def main(argv=None) -> int:
         # docs/TOPICS.md: pick a topic, read its primary sources, plan the order; falls back to the general rundown
         tr = {"info": {"mode": "feeds", "topic": None}, "ranked": None, "counts": None, "script_extra": {}, "covered": set()}
         if topics.enabled():
-            tr = topics.research_stage(items, reports, now, client, meter, ep)
-            items = tr["items"]
+            try:
+                tr = topics.research_stage(items, reports, now, client, meter, ep)
+                items = tr["items"]
+            except llm.BudgetExceeded as e:
+                print(f"topic stage: budget stop ({e}); general rundown")
+            except Exception as e:   # a malformed topics.json entry or any stage bug must not darken the channel
+                print(f"topic stage failed ({type(e).__name__}: {str(e)[:120]}); falling back to the general rundown")
+                tr["info"]["fallback"] = f"topic stage error: {type(e).__name__}"
+                (ep / "topic_pick.json").write_text(json.dumps(tr["info"], indent=1, ensure_ascii=False))
         else:
             print("topic mode off (NEWSBOT_TOPIC_MODE): general rundown")
         src_chars = topics.SOURCE_CHARS if tr["ranked"] is not None else llm.SRC_CHARS

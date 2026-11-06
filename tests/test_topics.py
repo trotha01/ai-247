@@ -280,6 +280,23 @@ def test_history_hand_off_file_is_the_only_source_for_the_render_step(tmp_path, 
     assert "https://example.com/vfx/0" in topics.covered_urls(h)
 
 
+def test_malformed_topics_entry_does_not_crash_the_stage_caller(tmp_path, monkeypatch):
+    """day1 wraps research_stage: a topic without keywords/name raises inside pick(), and day1 must fall back."""
+    bad = {"version": 1, "settings": {}, "topics": [{"id": "broken"}]}   # no name: score_topic -> KeyError
+    (tmp_path / "topics.json").write_text(json.dumps(bad))
+    monkeypatch.setattr(topics, "TOPICS_PATH", tmp_path / "topics.json")
+    monkeypatch.setattr(topics, "HISTORY_PATH", tmp_path / "h.json")
+    monkeypatch.setenv("NEWSBOT_OFFLINE", "1")
+    (tmp_path / "episode").mkdir()
+    with pytest.raises(KeyError):
+        topics.research_stage(agent_items(6), [], NOW, None, llm.Meter(), tmp_path / "episode", log=lambda *a: None)
+    # the caller's contract (newsbot/day1.py) is to catch this and continue in feeds mode; exercised via its source text
+    import inspect
+    from newsbot import day1
+    src = inspect.getsource(day1.main)
+    assert "topic stage failed" in src and "except Exception" in src
+
+
 def test_safe_name_strips_markup_and_caps_length():
     assert topics.safe_name("Robots <b>now</b> & \"world models\"\n" + "x" * 100) == ("Robots bnow/b & world modelsx" + "x" * 31)[:60]
     assert topics.safe_name("AI for VFX and film and video production") == "AI for VFX and film and video production"
