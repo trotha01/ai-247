@@ -200,7 +200,7 @@ jobs:
             git rebase --abort 2>/dev/null || true   # a conflicted rebase must not poison the next attempt
             echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
           done
-          echo "::warning::topics.json push failed; the new topic is in the artifact (out1/episode/topic_pick.json)"
+          echo "::warning::topics.json push refused (expected on main: the ruleset requires PRs); the new topic is in D1 (discovered_topics) and in the artifact (out1/episode/topic_pick.json)"
 
       - name: Verify live playback (site/test/e2e-live.js; skipped when nothing was published)
         # Proof that https://ai-247.pages.dev plays right now, from the runner (the cloud sandbox is not always able to

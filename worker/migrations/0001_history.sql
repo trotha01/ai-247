@@ -27,3 +27,10 @@ CREATE TABLE IF NOT EXISTS claims (
   sha16  TEXT NOT NULL,
   PRIMARY KEY (run_id, sha16)
 );
+-- Topics added by the discovery lane (docs/TOPICS.md). Also appended to topics/topics.json when the run can push;
+-- on main the ruleset refuses that push, so this table is the durable copy and is merged into the list at run time.
+CREATE TABLE IF NOT EXISTS discovered_topics (
+  id    TEXT PRIMARY KEY,
+  added TEXT NOT NULL,
+  entry TEXT NOT NULL
+);

@@ -144,6 +144,21 @@ class D1:
         for sha in entry.get("sentence_sha256", []):
             self.query("INSERT OR IGNORE INTO claims (run_id, sha16) VALUES (?, ?)", [run_id, str(sha)[:16]])
 
+    # ------------------------------------------------------------------ discovered topics
+    def load_topics(self) -> list[dict]:
+        """Topics the discovery lane added, oldest first (the durable copy; topics.json may lag on main)."""
+        out = []
+        for r in self.query("SELECT entry FROM discovered_topics ORDER BY added, id"):
+            try:
+                out.append(json.loads(r["entry"]))
+            except Exception:
+                continue
+        return out
+
+    def upsert_topic(self, entry: dict) -> None:
+        self.query("INSERT OR REPLACE INTO discovered_topics (id, added, entry) VALUES (?, ?, ?)",
+                   [str(entry["id"]), str(entry.get("added", "")), json.dumps(entry, separators=(",", ":"), ensure_ascii=False)])
+
     def run_ids(self) -> set[str]:
         return {str(r["run_id"]) for r in self.query("SELECT run_id FROM episodes")}
 

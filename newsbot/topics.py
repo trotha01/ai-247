@@ -53,6 +53,17 @@ def load_topics(path: Path = TOPICS_PATH) -> dict:
         cfg["settings"].setdefault(k, v)   # mirrored to the top level for the scoring code
         cfg[k] = cfg["settings"][k]
     cfg["settings"].pop("max_new_topics_per_day", None)   # removed 2026-11-06: no cap on new areas per day
+    if not HISTORY_PATH and history_db.configured():    # discovered topics kept in D1 (the push of topics.json can fail on main)
+        try:
+            db = _d1()
+            have = {t["id"] for t in cfg["topics"]}
+            extra = [t for t in (db.load_topics() if db else []) if t.get("id") not in have]   # the file wins by id (Trevor's edits)
+            if extra:
+                cfg["topics"] += extra
+                cfg["from_d1"] = [t["id"] for t in extra]
+                print(f"topics: {len(extra)} discovered topic(s) merged from D1: {', '.join(cfg['from_d1'])}")
+        except history_db.D1Unavailable as e:
+            print(f"topics: D1 discovered topics unavailable ({e})")
     for t in cfg["topics"]:
         t.setdefault("enabled", True), t.setdefault("lane", "seed"), t.setdefault("sources", []), t.setdefault("keywords", [])
         t.setdefault("seed_urls", [])
@@ -60,7 +71,7 @@ def load_topics(path: Path = TOPICS_PATH) -> dict:
 
 
 def save_topics(cfg: dict, path: Path = TOPICS_PATH) -> None:
-    doc = {k: v for k, v in cfg.items() if k not in DEFAULTS}          # the mirrored settings are not written twice
+    doc = {k: v for k, v in cfg.items() if k not in DEFAULTS and k != "from_d1"}   # the mirrored settings are not written twice
     doc["topics"] = [{k: v for k, v in t.items() if not k.startswith("_")} for t in cfg["topics"]]
     Path(path).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 
@@ -444,10 +455,17 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
     if entry_t:   # gated at run time against this run's items and web results (discovery.validate); no daily cap
         cfg = load_topics()
         today = ts[:10]
-        if not any(t["id"] == entry_t["id"] for t in cfg["topics"]):
-            cfg["topics"].append({**entry_t, "added": today})
-            save_topics(cfg)
+        if not any(t["id"] == entry_t["id"] for t in cfg["topics"]) or entry_t["id"] in cfg.get("from_d1", []):
+            if not any(t["id"] == entry_t["id"] for t in cfg["topics"]):
+                cfg["topics"].append({**entry_t, "added": today})
+            save_topics(cfg)                          # the file copy (committed when the branch allows the push)
             result["topic_added"] = entry_t["id"]
+        if db is not None:                            # the durable copy
+            try:
+                db.upsert_topic({**entry_t, "added": today})
+                result["topic_in_d1"] = True
+            except history_db.D1Unavailable as e:
+                print(f"topics: D1 topic write failed: {e}")
     # Mirror to R2 only when this run actually read the mirror (or D1 gave the full history): a transient R2 read
     # failure must never overwrite the mirror with a history that lacks the earlier entries (review finding).
     if r2.r2_configured():

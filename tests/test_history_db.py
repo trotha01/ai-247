@@ -50,6 +50,10 @@ class FakeCF:
             self.rows["claims"] = {k: v for k, v in self.rows["claims"].items() if k[0] != params[0]}
         elif s.startswith("SELECT ENTRY FROM EPISODES"):
             return [{"entry": r["entry"]} for r in sorted(self.rows["episodes"].values(), key=lambda r: r["ts"], reverse=True)][: params[0]]
+        elif s.startswith("INSERT OR REPLACE INTO DISCOVERED_TOPICS"):
+            self.rows.setdefault("topics", {})[params[0]] = {"entry": params[2], "added": params[1]}
+        elif s.startswith("SELECT ENTRY FROM DISCOVERED_TOPICS"):
+            return [{"entry": r["entry"]} for r in sorted(self.rows.get("topics", {}).values(), key=lambda r: r["added"])]
         elif s.startswith("SELECT RUN_ID"):
             return [{"run_id": k} for k in self.rows["episodes"]]
         elif s.startswith("SELECT URL"):
@@ -64,7 +68,7 @@ ENTRY = {"run_id": "4242", "ts": "2026-11-06T14:00:00Z", "topic": "agent-harness
 
 def test_schema_is_idempotent_statements_from_the_worker_migration():
     stmts = history_db._split_sql(Path("worker/migrations/0001_history.sql").read_text())
-    assert len(stmts) == 6 and all("IF NOT EXISTS" in s for s in stmts) and stmts[0].startswith("CREATE TABLE IF NOT EXISTS episodes")
+    assert len(stmts) == 7 and all("IF NOT EXISTS" in s for s in stmts) and stmts[0].startswith("CREATE TABLE IF NOT EXISTS episodes")
 
 
 def test_round_trip_create_schema_upsert_load_without_network(monkeypatch):
@@ -73,12 +77,14 @@ def test_round_trip_create_schema_upsert_load_without_network(monkeypatch):
     db = history_db.D1(token="s3cr3t-value", account="acct", opener=fake)
     history_db._SCHEMA_DONE.clear()
     assert db.database_id() == "db-new"                       # created by name, once
-    assert db.ensure_schema() == 6 and db.ensure_schema() == 0  # second call is a no-op in-process
+    assert db.ensure_schema() == 7 and db.ensure_schema() == 0  # second call is a no-op in-process
     db.upsert(ENTRY)
     h = db.load()
     assert h["backend"] == "d1" and h["episodes"] == [ENTRY]
     assert db.covered_urls() == {"https://openai.com/a", "https://x/b"} and db.run_ids() == {"4242"}
     assert len(fake.rows["claims"]) == 3
+    db.upsert_topic({"id": "robot-world-models", "added": "2026-11-06", "lane": "discovered", "keywords": ["robot"]})
+    assert db.load_topics() == [{"id": "robot-world-models", "added": "2026-11-06", "lane": "discovered", "keywords": ["robot"]}]
     # params are bound, never interpolated into SQL
     assert all("openai.com" not in sql for sql in fake.sql)
     # no secret or account id is ever in a log line: the only place they appear is the request itself

@@ -85,8 +85,11 @@ at low effort, writer and checker stay on Claude Haiku 5.5.
   summary says `History store: r2 ... NEEDS TREVOR: Add Cloudflare API token permission Account -> D1 -> Edit`;
   the deploy job removes the binding so the Worker still deploys. On the first run with D1 working, entries found in
   the R2 mirror are imported, so nothing is lost across the switch.
-- Nothing about history is committed to the repo (`episodes/` is git-ignored). Only `topics/topics.json` is committed
-  back, and only when discovery added a topic.
+- Nothing about history is committed to the repo (`episodes/` is git-ignored). A topic added by discovery is written
+  to the D1 table `discovered_topics` (the durable copy, merged into the topic list at run time; an entry with the same
+  id in `topics.json` wins, so Trevor can edit or disable it there) and appended to `topics/topics.json`, which the
+  run commits back when the branch allows it. On `main` the ruleset (pull requests required) refuses that push, so
+  the step only warns; the topic is still in D1 and in the run artifact (`topic_pick.json`).
 
 ## Cost and models
 
