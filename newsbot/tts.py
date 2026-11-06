@@ -15,7 +15,7 @@ VOICE = os.environ.get("NEWSBOT_VOICE", "af_heart")
 
 class Tts:
     def __init__(self, model_dir="models", force_engine: str | None = None, log=print):
-        self.log, self.engine, self._k = log, None, None
+        self.log, self.engine, self._k, self.speed = log, None, None, 1.0
         order = [force_engine] if force_engine else ["kokoro", "espeak-ng"]
         errs = []
         for name in order:
@@ -49,8 +49,8 @@ class Tts:
     def synth(self, text: str, wav_path: str) -> None:
         if self.engine == "kokoro":
             import soundfile as sf
-            samples, sr = self._k.create(text, voice=VOICE, speed=1.0, lang="en-us")
+            samples, sr = self._k.create(text, voice=VOICE, speed=self.speed, lang="en-us")
             sf.write(wav_path, samples, sr)
         else:
-            subprocess.run(["espeak-ng", "-v", "en-us", "-s", "165", "-w", wav_path, text],
+            subprocess.run(["espeak-ng", "-v", "en-us", "-s", str(int(165 * self.speed)), "-w", wav_path, text],
                            check=True, capture_output=True)

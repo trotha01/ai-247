@@ -17,7 +17,7 @@ from .render import run, ticker_text
 SEG = 6.0
 TARGET = 600.0
 LEAD, TAIL, MIN_SCENE = 0.5, 0.5, 4.0
-WORDS_PER_SEC = 2.6        # rough Kokoro pace, used only for the story-selection estimate
+WORDS_PER_SEC = 2.4        # rough Kokoro pace, used only for the story-selection estimate
 MAX_PAD = 40.0
 
 
@@ -84,8 +84,15 @@ def build_episode(script: dict, tts, work: Path, target: float = TARGET, max_sto
                 "citation": {"source": "", "url": "", "published": ""},
                 "narration": "Recap. " + " ".join(spoken(s["headline"]).rstrip(".") + "." for s in chosen)}
 
+    chart_scene = None
+    if script.get("chart", {}).get("data"):
+        data = script["chart"]["data"]
+        chart_scene = {"kind": "chart", "title": "Where the stories come from", "chart": script["chart"], "claims": [], "headline": "",
+                       "citation": {"source": "feeds", "url": "", "published": ""},
+                       "narration": "Here is where today's stories come from. " + " ".join(
+                           f"{src} supplied {n} items." for src, n in data[:6])}
     # 1. estimate-based selection in rank order (skip stories that do not fit, keep trying shorter ones)
-    chosen, fixed = [], est_seconds([intro, outro]) + MAX_PAD
+    chosen, fixed = [], est_seconds([intro, outro] + ([chart_scene] if chart_scene else [])) + MAX_PAD
     for s in stories[:max_stories]:
         sc = story_scenes(len(chosen), s)
         if fixed + est_seconds(sum((story_scenes(k, c) for k, c in enumerate(chosen)), []) + sc) + est_seconds([recap_for(chosen + [s])]) <= target:
@@ -94,7 +101,7 @@ def build_episode(script: dict, tts, work: Path, target: float = TARGET, max_sto
     # 2. synthesise, then drop trailing stories until the real total fits
     while True:
         intro["items"] = _items(chosen)
-        scenes = [intro]
+        scenes = [intro] + ([chart_scene] if chart_scene else [])
         for k, s in enumerate(chosen):
             scenes += story_scenes(k, s)
         scenes += [recap_for(chosen), outro]

@@ -1,1 +1,1 @@
-{"state":"running","msg":"Day 1 code done, PR #3 open (units+seam 50 pass locally, 600.0 s local render, A/V drift 21 ms). Waiting on CI, then merge, then Actions runs (extractive + Haiku; key secret confirmed present)."}
+{"state":"running","msg":"Day 1 merged to main (PR #3, #4). Day 0 workflow re-ran green on Node 24 actions. Extractive run passed render (535 s, 600.0 s episode, 28/28 sentences supported) but a missing test file failed the tests step; fixing in PR #5 (adds chart scene to cut standby pad), then rerunning extractive + Haiku (key present)."}

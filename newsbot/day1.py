@@ -96,6 +96,7 @@ def main(argv=None) -> int:
 
     with tm.stage("tts_and_plan"):
         tts = Tts(force_engine=a.tts or None)
+        tts.speed = 0.92  # slightly unhurried news pace; also fills the 10 minutes with speech instead of standby
         print("tts engine:", tts.engine)
         scenes, chosen, plan_info = episode.build_episode(sc, tts, work, a.target)
         sc["stories"] = chosen  # only what airs is reported

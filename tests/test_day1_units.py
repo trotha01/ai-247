@@ -175,3 +175,24 @@ def test_scene_durations_are_whole_frames_and_samples():
     for secs in (0.2, 3.77, 4.01, 9.99):
         d = episode.frame_dur(secs)
         assert d >= episode.MIN_SCENE and (d * 30) == int(d * 30) and (d * 48000) == int(d * 48000)
+
+
+class FakeTts:
+    """Writes silence whose length follows the word count (about 2.6 words/s), like a real voice."""
+    speed = 1.0
+
+    def synth(self, text, path):
+        import subprocess
+        secs = max(0.6, len(text.split()) / 2.6)
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", f"{secs:.2f}", path],
+                       check=True, capture_output=True)
+
+
+def test_build_episode_hits_exactly_600s_with_chart_scene_and_pad(tmp_path):
+    stories = [sm.extractive_story(i) for i in make_items(18)[:12]]
+    script = sm.build_episode_script(stories, [("OpenAI", 15), ("Google AI", 10)], "extractive")
+    scenes, chosen, info = episode.build_episode(script, FakeTts(), tmp_path)
+    assert abs(sum(s["duration"] for s in scenes) - 600.0) < 1e-6
+    assert scenes[0]["kind"] == "rundown" and scenes[1]["kind"] == "chart" and scenes[-2]["kind"] == "outro"
+    assert scenes[-1]["kind"] == "standby" and info["pad_seconds"] >= 0  # pad is large only because all 12 stories were used
+    assert 1 <= len(chosen) <= 12 and all(s["claims"] == [] for s in scenes if s["kind"] in ("chart", "standby", "rundown"))

@@ -86,6 +86,10 @@ jobs:
           python -m newsbot.day1 --out out1 $replay ${{ inputs.tts != '' && format('--tts {0}', inputs.tts) || '' }}
           echo "pipeline wall-clock: $((SECONDS-start)) s"
 
+      - name: Print run report (no secrets in it)
+        if: always()
+        run: cat out1/report.json | head -c 6000 || true
+
       - name: Tests (Day 1 units + seam on the real render)
         run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py
 
