@@ -59,16 +59,34 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check R2 secrets
+        id: gate
+        env:
+          A: ${{ secrets.R2_ACCOUNT_ID }}
+          K: ${{ secrets.R2_ACCESS_KEY_ID }}
+          S: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          B: ${{ secrets.R2_BUCKET }}
+        run: |
+          if [ -z "$A" ] || [ -z "$K" ] || [ -z "$S" ] || [ -z "$B" ]; then
+            echo "::warning::R2_* secrets are not set: nothing to do (no-op). Add the repo secrets and re-run this workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "R2 secrets present"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v7
+        if: steps.gate.outputs.ready == 'true'
         with:
           python-version: "3.12"
 
       - name: Install (boto3 only; no render deps needed)
+        if: steps.gate.outputs.ready == 'true'
         timeout-minutes: 5
         run: timeout 240 pip install --timeout 60 --retries 3 "boto3>=1.34"
 
       - name: Fetch the artifact to loop (source=artifact)
-        if: env.SOURCE == 'artifact'
+        if: steps.gate.outputs.ready == 'true' && env.SOURCE == 'artifact'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,29 +101,53 @@ jobs:
           else echo "no bulletin-day0 or episode-day1 artifact in run $id"; ls -R artifact | head -50; exit 1; fi
 
       - name: Build and publish the pool manifest (manifest written last; guarded, see header)
+        if: steps.gate.outputs.ready == 'true'
         env:
           # Empty when unset; never echoed. The script skips R2 entirely without them.
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # A Day 0 bulletin is 10 segments, an episode 100: anything smaller is not a pool.
+          MIN_SEGMENTS: "10"
         run: |
+          set -o pipefail
           echo "event: $GITHUB_EVENT_NAME, source: $SOURCE, max_blocks: $MAX_BLOCKS${FORCE:+, $FORCE}"
           if [ "$SOURCE" = "r2" ]; then
-            python -m newsbot.replay_pool --from-r2 --max-blocks "$MAX_BLOCKS" --write pool-manifest.json --upload $FORCE
+            python -m newsbot.replay_pool --from-r2 --max-blocks "$MAX_BLOCKS" --min-segments "$MIN_SEGMENTS" --write pool-manifest.json --upload $FORCE | tee publish.log
           else
-            python -m newsbot.replay_pool --from-dir "$POOL_DIR" --id "$POOL_ID" --write pool-manifest.json --upload
+            python -m newsbot.replay_pool --from-dir "$POOL_DIR" --id "$POOL_ID" --min-segments "$MIN_SEGMENTS" --write pool-manifest.json --upload $FORCE | tee publish.log
           fi
+
+      - name: Verify pool/manifest.json in R2 and the Worker's /healthz
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # The live Worker: repo variable WORKER_URL, else the host of streamUrl in site/config.json.
+          WORKER_URL: ${{ vars.WORKER_URL }}
+        # Reads pool/manifest.json back from R2 (must verify complete and list the same segments as
+        # pool-manifest.json), then polls /healthz until pool.ok with this run's built_at (the Worker's pool cache
+        # is 60 s). Writes healthz.json for the summary and the artifact.
+        run: python scripts/pool_check.py --manifest pool-manifest.json --wait 150
 
       - name: Job summary
         if: always()
         run: |
-          { echo '## Replay pool'; echo; echo '```json'; head -c 4000 pool-manifest.json 2>/dev/null || echo '(no pool manifest written)'; echo; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '## Replay pool'; echo
+            [ -f publish.log ] && { echo '```'; cat publish.log; echo '```'; echo; }
+            [ -f healthz.json ] && { echo '### /healthz'; echo '```json'; head -c 3000 healthz.json; echo; echo '```'; echo; }
+            echo '### pool manifest'; echo '```json'; head -c 4000 pool-manifest.json 2>/dev/null || echo '(no pool manifest written)'; echo; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: replay-pool-manifest
-          path: pool-manifest.json
+          path: |
+            pool-manifest.json
+            healthz.json
+            publish.log
           retention-days: 14
           if-no-files-found: ignore
