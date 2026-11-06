@@ -26,9 +26,10 @@ env:
   # Anthropic key. Same-repo PRs need no entry (their authors have write access). Everyone else's
   # fork PR gets the tests from ci.yml and a note here; a maintainer reviews it by hand.
   FORK_REVIEW_AUTHORS: "EliasTheApe"
-  # Cost caps: cheapest current model, a turn limit, and a cap on the diff Claude is shown.
+  # Cost caps: cheapest current model, a turn limit, a dollar limit per run, and a cap on the diff Claude is shown.
   REVIEW_MODEL: claude-haiku-5-5
   MAX_TURNS: "12"
+  MAX_BUDGET_USD: "0.50"
   MAX_DIFF_BYTES: "150000"
 
 jobs:
@@ -105,6 +106,7 @@ jobs:
           claude_args: |
             --model ${{ env.REVIEW_MODEL }}
             --max-turns ${{ env.MAX_TURNS }}
+            --max-budget-usd ${{ env.MAX_BUDGET_USD }}
             --allowedTools "Read,Grep,Glob"
             --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"
             --json-schema '{"type":"object","properties":{"summary":{"type":"string"},"blocking":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"line":{"type":"integer"},"finding":{"type":"string"}},"required":["finding"]}},"non_blocking":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"line":{"type":"integer"},"finding":{"type":"string"}},"required":["finding"]}}},"required":["summary","blocking","non_blocking"]}'
