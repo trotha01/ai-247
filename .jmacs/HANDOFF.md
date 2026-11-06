@@ -1,18 +1,18 @@
 # Handoff
 
 ## Objective
-Day 1 of the ai-247 PoC: 10-minute HLS episode, rule-based ranker, Haiku 5.5 writer + separate fact-check (key-gated, 0.05 USD cap), seam tests, slate + replay pool, Actions housekeeping, verified facts.
+AI-247 "local end-to-end and R2 key layout" (Worker/site/docs/ci only; newsbot/ untouched; no deploy).
 
 ## Done
-- All code merged to main (PRs #3, #4, #5, #9, docs PR). Day 0 workflow green on Node 24 actions (run 42197942314).
-- Haiku run 42203098918: 600.0 s, 11 stories, 40/40 sentences supported (first pass 86%), 0 unsourced, est. cost 0.00484 USD, pipeline 583 s, drift 21 ms, 58 passed.
-- Extractive run 42208582626 green: 28 sentences, pipeline 563 s.
-- docs/PLAN.md has "Day 1 run results (measured)", survey, verified facts, where reality differs.
+- Search done (no kb/~/org available); reused wrangler/miniflare, vitest, hls-parser, Playwright, ffmpeg; no custom HLS code.
+- Found mismatch: r2.py -> `bulletins/<ts>/<file>`, manifest.json uploaded before segments; Worker read root -> 503.
+- Worker: PREFIX normalised, preflight Range, .ts always video/mp2t. docs/R2_LAYOUT.md has the contract.
+- Tests: worker/test/e2e (real r2.upload -> local R2 -> Worker), site/test/e2e-worker.js (browser, cross-origin, real playback). 56 worker tests pass locally; site e2e passes.
+- ci.yml job `worker-site-e2e` added.
 
 ## Pending
-- Trevor: watch the episode (gh run download 42203098918 -R trotha01/ai-247), go/no-go.
-- Held peer requests, need Trevor's confirmation directly: (1) trim tests (removes Day 0 tests that the brief says must keep passing); (2) R2 manifest-last uploader (R2 not in Day 1 brief, no R2 secrets); (3) remove m3u8 from requirements (tests/test_seam.py imports it, so removal would break CI).
-- Unverified: GitHub docs/terms on media rendering, RFC 8216 text (hosts unreachable from the cloud session).
+- (done once merged) PR #11 CI green, merging.
+- Day 1 owner: upload manifest.json LAST (r2.py still sorted-order) and adopt Layout B in docs/R2_LAYOUT.md.
 
 ## Next step
-Trevor decides; then Day 2 (Worker + pool) or the held changes.
+Nothing for this item. Day 1 owner follows docs/R2_LAYOUT.md (manifest last).
