@@ -1,1 +1,1 @@
-{"state":"done","msg":"PR #11 green and merged: Worker PREFIX fix, e2e (real r2.upload -> local R2 -> Worker -> browser), docs/R2_LAYOUT.md, CI job. Day 1 uploader must write manifest.json last."}
+{"state":"running","msg":"PR #8 hung in pip install (pre-#12 branch); updating it from main and re-running; day1.yml has no R2 upload, dispatching day0-bulletin (has R2 secrets) to test r2.py"}
