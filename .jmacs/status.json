@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #31 was green but conflicted with main (other session .jmacs files); merged main into cloud/ai247-readme, waiting for checks to re-run, then squash-merge"}
+{"state":"running","msg":"Survey done (PLAN, day1.yml, newsbot, Worker swap/failover, cron + topics handoffs, run timings). Designing: hourly cron, 6 parallel 10-min bulletins per run, once-then-loop manifest so fresh airs before replays."}
