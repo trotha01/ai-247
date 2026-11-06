@@ -1,5 +1,5 @@
 {
-  "note": "Topic list for the research stage (docs/TOPICS.md). Edit freely. keywords: lower-case phrases matched against feed item title+summary. sources: extra feeds / GitHub release repos fetched only for this topic. The discovery lane appends topics with lane 'discovered' (max max_new_topics_per_day per day); delete or set enabled=false to drop one. settings: repeat_after_episodes (N), min_new_items_to_repeat, max_new_topics_per_day, min_items, discovery_enabled, lane_weights. queries: web search strings for the keyless arXiv/GitHub/HN lookups (newsbot/research.py).",
+  "note": "Topic list for the research stage (docs/TOPICS.md). Edit freely. keywords: lower-case phrases matched against feed item title+summary. sources: extra feeds / GitHub release repos fetched only for this topic. queries: web search strings for the keyless arXiv/GitHub/HN lookups (newsbot/research.py). seed_urls: primary links a discovery call found (read and cited like any source). The discovery lane (web search, Claude Fable 5.1) appends topics with lane 'discovered', no daily cap; delete or set enabled=false to drop one. settings: repeat_after_episodes (N), min_new_items_to_repeat, min_items, discovery_enabled, lane_weights. The episode history is in Cloudflare D1, not in this repo.",
   "version": 1,
   "settings": {
     "repeat_after_episodes": 6,
