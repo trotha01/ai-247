@@ -1,5 +1,5 @@
-:root{--bg:#fff;--fg:#111;--muted:#555;--accent:#b00020;--card:#f3f3f3}
-@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--accent:#ff6b81;--card:#222}}
+:root{--bg:#fff;--fg:#111;--muted:#555;--accent:#b00020;--card:#f3f3f3;--link:#0b57d0}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--accent:#ff6b81;--card:#222;--link:#8ab4ff}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
 header,main,footer{max-width:960px;margin:0 auto;padding:0 16px}
@@ -11,4 +11,5 @@ h1{margin:0;font-size:1.6rem}
 video{width:100%;height:100%;display:block}
 .status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(0,0,0,.8);color:#fff;font-size:1.1rem}
 .status[hidden]{display:none}
+a{color:var(--link)}
 ul{padding-left:1.2rem}
