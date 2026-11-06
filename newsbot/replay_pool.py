@@ -72,14 +72,6 @@ def build_pool_manifest(blocks: list[dict], epoch: int | None, built_from: dict,
 
 
 # ---------------------------------------------------------------- R2 side -------------------------------------
-def client():
-    """boto3 S3 client for R2 from the R2_* environment (same convention as newsbot/r2.py). Never logs them."""
-    import boto3
-    return boto3.client("s3", endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
-                        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-                        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"], region_name="auto")
-
-
 def _list_keys(s3, bucket: str, prefix: str) -> list[str]:
     keys, token = [], None
     while True:
@@ -198,7 +190,7 @@ def main(argv=None) -> int:
                 return 2
             print("R2 secrets not set: skipping upload, writing the pool manifest locally only")
         else:
-            s3, bucket = client(), os.environ["R2_BUCKET"]
+            s3, bucket = r2.client(), r2.bucket()
 
     blocks, local_blocks, report, epoch, seg_s = [], [], {}, a.epoch, 6
     if a.from_r2 and s3:

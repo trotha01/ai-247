@@ -8,6 +8,7 @@ binding = "BUCKET"
 bucket_name = "ai247-media"
 
 [vars]
+# R2 key prefix of manifest.json + segments ("" = bucket root). See docs/R2_LAYOUT.md. Override per deploy: --var PREFIX:bulletins/live/
 PREFIX = ""
 WINDOW = "5"
 # Fallback epoch (unix seconds) when manifest.json has no "epoch". Fixed so the clock is stable across deploys.

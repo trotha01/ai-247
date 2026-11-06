@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from newsbot import playlist, replay_pool
+from newsbot import playlist, r2, replay_pool
 
 
 class FakeS3:
@@ -175,7 +175,7 @@ def test_cli_from_r2_and_dir_uploads_with_fake_client(tmp_path, monkeypatch):
     for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
         monkeypatch.setenv(k, "fake")
     monkeypatch.setenv("R2_BUCKET", "b")
-    monkeypatch.setattr(replay_pool, "client", lambda: s3)
+    monkeypatch.setattr(r2, "client", lambda: s3)
     make_render(tmp_path / "slate", n=3)
     out = tmp_path / "pool.json"
     assert replay_pool.main(["--from-r2", "--from-dir", str(tmp_path / "slate"), "--write", str(out), "--upload"]) == 0

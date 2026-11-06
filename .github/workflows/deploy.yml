@@ -1,0 +1,190 @@
+name: deploy
+
+# Production deploy on merge to main (never on pull_request). See docs/DEPLOY.md.
+#   worker/**  -> run the Worker tests, then `wrangler deploy` (Cloudflare Worker `ai247-live`), then scripts/smoke.sh
+#   site/**    -> `wrangler pages deploy site/` to the existing direct-upload Pages project `ai-247`
+# If CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set, the deploy jobs log that and exit 0 (clean no-op).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "site/**"
+      - "scripts/smoke.sh"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "What to deploy"
+        type: choice
+        default: all
+        options: [all, worker, site]
+
+permissions:
+  contents: read
+
+# One production deploy at a time; a queued run waits for the current one instead of overlapping it.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  PAGES_PROJECT: ai-247
+  NODE_VERSION: "22"
+
+jobs:
+  changes:
+    if: github.repository == 'trotha01/ai-247'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      worker: ${{ steps.diff.outputs.worker }}
+      site: ${{ steps.diff.outputs.site }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          WHAT: ${{ github.event.inputs.what }}
+        run: |
+          set -eu
+          worker=false; site=false
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            case "$WHAT" in all) worker=true; site=true ;; worker) worker=true ;; site) site=true ;; esac
+          elif [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+            echo "no usable base commit (first push or force push): deploying everything"
+            worker=true; site=true
+          else
+            files=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+            printf 'changed files:\n%s\n' "$files"
+            echo "$files" | grep -Eq '^(worker/|scripts/smoke\.sh|\.github/workflows/deploy\.yml)' && worker=true
+            echo "$files" | grep -Eq '^(site/|\.github/workflows/deploy\.yml)' && site=true
+          fi
+          echo "worker=$worker" >> "$GITHUB_OUTPUT"
+          echo "site=$site" >> "$GITHUB_OUTPUT"
+          echo "deploy worker: $worker, deploy site: $site"
+
+  test-worker:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - name: Worker tests (unit + wrangler dev --local)
+        # The hermetic gate. The uploader-layout e2e (test/e2e, needs ffmpeg + the Python uploader) and the
+        # browser e2e already run on every push to main in ci.yml (worker-site-e2e).
+        env:
+          CI: "1"
+          WRANGLER_SEND_METRICS: "false"
+        run: npm run test:unit && npm run test:dev
+
+  deploy-worker:
+    needs: [changes, test-worker]
+    if: needs.changes.outputs.worker == 'true' && needs.test-worker.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check Cloudflare secrets
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set: skipping Worker deploy (no-op). Add the repo secrets and re-run this workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cloudflare secrets present: deploying Worker"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.ready == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Deploy Worker
+        id: deploy
+        if: steps.gate.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          packageManager: npm
+          command: deploy
+      - name: Smoke test
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+          WORKER_URL: ${{ vars.WORKER_URL }}
+        run: |
+          url="${DEPLOY_URL:-$WORKER_URL}"
+          if [ -z "$url" ]; then
+            echo "::error::no Worker URL: wrangler printed none and the repo variable WORKER_URL is unset"; exit 1
+          fi
+          echo "Worker URL: $url  (put <url>/live.m3u8 in site/config.json streamUrl)"
+          bash scripts/smoke.sh "$url"
+
+  deploy-site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check Cloudflare secrets
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set: skipping Pages deploy (no-op). Add the repo secrets and re-run this workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cloudflare secrets present: deploying Pages project $PAGES_PROJECT"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.ready == 'true'
+      - name: Site config sanity
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          node -e 'const c=JSON.parse(require("fs").readFileSync("site/config.json","utf8")); if(!("streamUrl" in c)) throw new Error("site/config.json has no streamUrl"); console.log("streamUrl:", c.streamUrl||"(empty = offline fallback)")'
+      - name: Deploy Pages (direct upload of site/)
+        id: deploy
+        if: steps.gate.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site/ --project-name=${{ env.PAGES_PROJECT }} --branch=main --commit-dirty=true
+      - name: Smoke test (site)
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          for url in "https://${PAGES_PROJECT}.pages.dev/" "$DEPLOY_URL"; do
+            [ -n "$url" ] || continue
+            ok=false
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -sS -o /tmp/site.html -w '%{http_code}' --max-time 20 "$url" || true)
+              if [ "$code" = 200 ] && grep -qi '<script' /tmp/site.html; then ok=true; break; fi
+              echo "attempt $i: $url -> HTTP $code; retrying in 5 s"; sleep 5
+            done
+            if [ "$ok" = true ]; then echo "ok: $url"; else echo "::error::$url did not serve the site"; exit 1; fi
+          done
