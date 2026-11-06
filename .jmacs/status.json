@@ -1,1 +1,1 @@
-{"state":"running","msg":"Diagnosed: cron is on main and active, one slot (12:23Z) missed with no repo-side blocker; fixed the silent replay-fetch 404 (--workflow day1.yml) and documented schedule/budget behaviour in day1.yml. PR next, then waiting for the 15:23Z scheduled run."}
+{"state": "running", "msg": "PR #24 open (cloud/ai247-pool -> main): daily guarded refresh + MAX_MANIFEST_AGE_S 14400; pool already seeded by run 42222599138; waiting for ci, then merge, deploy, /healthz check"}
