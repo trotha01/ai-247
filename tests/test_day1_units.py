@@ -127,7 +127,7 @@ def test_story_falls_back_to_extractive_when_llm_returns_garbage():
 
 def test_budget_abort_at_cap_uses_current_prices(monkeypatch):
     assert llm.PRICES["claude-haiku-5-5"] == (0.10, 0.50) and llm.PRICES["claude-sonnet-5-5"] == (2.0, 10.0)
-    assert llm.MAX_RUN_USD == 0.05
+    assert llm.MAX_RUN_USD == 0.75   # topic stage on Fable 5.1 (docs/TOPICS.md); the Haiku digest alone stays far under 0.05
     m = llm.Meter()
     m.add(SimpleNamespace(input_tokens=100_000, output_tokens=0))
     assert round(m.usd, 6) == round(0.1 * llm.PRICE_IN, 6)

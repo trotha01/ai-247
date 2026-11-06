@@ -10,7 +10,7 @@
 // DISCONTINUITY-SEQUENCE is the count of tagged segments before the window under this composed mapping; after a
 // return completes it collapses into a constant `offset` added to the live chain's own count forever.
 
-import { eras, layout, tagsBefore, tagsBeforeEras } from "./playlist.js";
+import { eraFor, eraSegment, eras, layout, tagsBefore, tagsBeforeEras } from "./playlist.js";
 
 export const SOURCE = { LIVE: "live-manifest", POOL: "replay-pool", CACHED: "live-manifest-cached", NONE: "none" };
 
@@ -33,18 +33,14 @@ export function poolLayout(pool) {
   return L;
 }
 
-const eraFor = (es, k) => { let e = es[0]; for (const x of es) if (x.start <= k) e = x; return e; };
-
-/** Segment the live chain plays at k, same rule as rollingPlaylist (tag at block starts, never at k=0). */
+/** Segment the live chain plays at k, same rule as rollingPlaylist (fresh blocks once, then the loop region;
+ * tag at block starts, never at k=0). */
 export function liveAt(manifest, k) {
-  const es = erasOf(manifest);
-  const e = eraFor(es, k);
-  const idx = (((k - e.start) % e.n) + e.n) % e.n;
-  const s = e.segs[idx];
-  return { uri: s.uri, duration: s.duration, tag: k > 0 && e.starts.has(idx) };
+  return eraSegment(eraFor(erasOf(manifest), k), k);
 }
 
-/** Tagged pool segments with number in [k0, hi) when pool[0] plays at k0 (k=0 never tagged). */
+/** Tagged pool segments with number in [k0, hi) when pool[0] plays at k0 (k=0 never tagged). The pool always
+ * loops its whole cycle (a pool manifest's loop_from is ignored: it is the fallback, there is nothing fresher). */
 export function poolTagsIn(P, k0, hi) {
   const c = hi - k0;
   if (c <= 0) return 0;

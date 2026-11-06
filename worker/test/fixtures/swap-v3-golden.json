@@ -1,0 +1,863 @@
+{
+ "note": "Generated from worker/src/playlist.js (nextSwapStart, swapDseq, eraSegment, tagsBeforeEras) for tests/test_publish.py: the Python port in newsbot/channel.py must give identical numbers.",
+ "manifests": {
+  "A3": {
+   "segment_seconds": 6,
+   "cycle_start_k": 100,
+   "cycle_start_dseq": 7,
+   "loop_from": 2,
+   "blocks": [
+    {
+     "id": "f0",
+     "segments": [
+      {
+       "uri": "f0/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_2.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_3.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "f1",
+     "segments": [
+      {
+       "uri": "f1/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f1/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f1/seg_2.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "s",
+     "segments": [
+      {
+       "uri": "s/seg_0.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "r0",
+     "segments": [
+      {
+       "uri": "r0/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "r0/seg_1.ts",
+       "duration": 6
+      }
+     ]
+    }
+   ]
+  },
+  "B3": {
+   "segment_seconds": 6,
+   "cycle_start_k": 130,
+   "cycle_start_dseq": 25,
+   "loop_from": 3,
+   "blocks": [
+    {
+     "id": "g0",
+     "segments": [
+      {
+       "uri": "g0/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g0/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g0/seg_2.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g0/seg_3.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g0/seg_4.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "g1",
+     "segments": [
+      {
+       "uri": "g1/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g1/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g1/seg_2.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g1/seg_3.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g1/seg_4.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "g2",
+     "segments": [
+      {
+       "uri": "g2/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g2/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g2/seg_2.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g2/seg_3.ts",
+       "duration": 6
+      },
+      {
+       "uri": "g2/seg_4.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "s",
+     "segments": [
+      {
+       "uri": "s/seg_0.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "f0",
+     "segments": [
+      {
+       "uri": "f0/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_2.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f0/seg_3.ts",
+       "duration": 6
+      }
+     ]
+    },
+    {
+     "id": "f1",
+     "segments": [
+      {
+       "uri": "f1/seg_0.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f1/seg_1.ts",
+       "duration": 6
+      },
+      {
+       "uri": "f1/seg_2.ts",
+       "duration": 6
+      }
+     ]
+    }
+   ],
+   "prev": {
+    "segment_seconds": 6,
+    "cycle_start_k": 100,
+    "cycle_start_dseq": 7,
+    "loop_from": 2,
+    "blocks": [
+     {
+      "id": "f0",
+      "segments": [
+       {
+        "uri": "f0/seg_0.ts",
+        "duration": 6
+       },
+       {
+        "uri": "f0/seg_1.ts",
+        "duration": 6
+       },
+       {
+        "uri": "f0/seg_2.ts",
+        "duration": 6
+       },
+       {
+        "uri": "f0/seg_3.ts",
+        "duration": 6
+       }
+      ]
+     },
+     {
+      "id": "f1",
+      "segments": [
+       {
+        "uri": "f1/seg_0.ts",
+        "duration": 6
+       },
+       {
+        "uri": "f1/seg_1.ts",
+        "duration": 6
+       },
+       {
+        "uri": "f1/seg_2.ts",
+        "duration": 6
+       }
+      ]
+     },
+     {
+      "id": "s",
+      "segments": [
+       {
+        "uri": "s/seg_0.ts",
+        "duration": 6
+       }
+      ]
+     },
+     {
+      "id": "r0",
+      "segments": [
+       {
+        "uri": "r0/seg_0.ts",
+        "duration": 6
+       },
+       {
+        "uri": "r0/seg_1.ts",
+        "duration": 6
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "swaps": [
+  {
+   "cur": "A3",
+   "k": 50,
+   "start": 100,
+   "dseq": 7
+  },
+  {
+   "cur": "A3",
+   "k": 95,
+   "start": 107,
+   "dseq": 9
+  },
+  {
+   "cur": "A3",
+   "k": 97,
+   "start": 107,
+   "dseq": 9
+  },
+  {
+   "cur": "A3",
+   "k": 98,
+   "start": 108,
+   "dseq": 10
+  },
+  {
+   "cur": "A3",
+   "k": 120,
+   "start": 130,
+   "dseq": 25
+  },
+  {
+   "cur": "A3",
+   "k": 130,
+   "start": 140,
+   "dseq": 31
+  },
+  {
+   "cur": "A3",
+   "k": 141,
+   "start": 151,
+   "dseq": 39
+  },
+  {
+   "cur": "A3",
+   "k": 150,
+   "start": 160,
+   "dseq": 45
+  },
+  {
+   "cur": "A3",
+   "k": 300,
+   "start": 310,
+   "dseq": 145
+  },
+  {
+   "cur": "B3",
+   "k": 50,
+   "start": 130,
+   "dseq": 25
+  },
+  {
+   "cur": "B3",
+   "k": 95,
+   "start": 130,
+   "dseq": 25
+  },
+  {
+   "cur": "B3",
+   "k": 97,
+   "start": 130,
+   "dseq": 25
+  },
+  {
+   "cur": "B3",
+   "k": 98,
+   "start": 130,
+   "dseq": 25
+  },
+  {
+   "cur": "B3",
+   "k": 120,
+   "start": 145,
+   "dseq": 28
+  },
+  {
+   "cur": "B3",
+   "k": 130,
+   "start": 145,
+   "dseq": 28
+  },
+  {
+   "cur": "B3",
+   "k": 141,
+   "start": 151,
+   "dseq": 31
+  },
+  {
+   "cur": "B3",
+   "k": 150,
+   "start": 160,
+   "dseq": 34
+  },
+  {
+   "cur": "B3",
+   "k": 300,
+   "start": 310,
+   "dseq": 90
+  }
+ ],
+ "timeline": [
+  {
+   "k": 95,
+   "uri": "f1/seg_1.ts",
+   "tag": false,
+   "dseq": 0
+  },
+  {
+   "k": 96,
+   "uri": "f1/seg_2.ts",
+   "tag": false,
+   "dseq": 0
+  },
+  {
+   "k": 97,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 0
+  },
+  {
+   "k": 98,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 0
+  },
+  {
+   "k": 99,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 0
+  },
+  {
+   "k": 100,
+   "uri": "f0/seg_0.ts",
+   "tag": true,
+   "dseq": 7
+  },
+  {
+   "k": 101,
+   "uri": "f0/seg_1.ts",
+   "tag": false,
+   "dseq": 8
+  },
+  {
+   "k": 102,
+   "uri": "f0/seg_2.ts",
+   "tag": false,
+   "dseq": 8
+  },
+  {
+   "k": 103,
+   "uri": "f0/seg_3.ts",
+   "tag": false,
+   "dseq": 8
+  },
+  {
+   "k": 104,
+   "uri": "f1/seg_0.ts",
+   "tag": true,
+   "dseq": 8
+  },
+  {
+   "k": 105,
+   "uri": "f1/seg_1.ts",
+   "tag": false,
+   "dseq": 9
+  },
+  {
+   "k": 106,
+   "uri": "f1/seg_2.ts",
+   "tag": false,
+   "dseq": 9
+  },
+  {
+   "k": 107,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 9
+  },
+  {
+   "k": 108,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 10
+  },
+  {
+   "k": 109,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 11
+  },
+  {
+   "k": 110,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 11
+  },
+  {
+   "k": 111,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 12
+  },
+  {
+   "k": 112,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 13
+  },
+  {
+   "k": 113,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 13
+  },
+  {
+   "k": 114,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 14
+  },
+  {
+   "k": 115,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 15
+  },
+  {
+   "k": 116,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 15
+  },
+  {
+   "k": 117,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 16
+  },
+  {
+   "k": 118,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 17
+  },
+  {
+   "k": 119,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 17
+  },
+  {
+   "k": 120,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 18
+  },
+  {
+   "k": 121,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 19
+  },
+  {
+   "k": 122,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 19
+  },
+  {
+   "k": 123,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 20
+  },
+  {
+   "k": 124,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 21
+  },
+  {
+   "k": 125,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 21
+  },
+  {
+   "k": 126,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 22
+  },
+  {
+   "k": 127,
+   "uri": "r0/seg_1.ts",
+   "tag": false,
+   "dseq": 23
+  },
+  {
+   "k": 128,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 23
+  },
+  {
+   "k": 129,
+   "uri": "r0/seg_0.ts",
+   "tag": true,
+   "dseq": 24
+  },
+  {
+   "k": 130,
+   "uri": "g0/seg_0.ts",
+   "tag": true,
+   "dseq": 25
+  },
+  {
+   "k": 131,
+   "uri": "g0/seg_1.ts",
+   "tag": false,
+   "dseq": 26
+  },
+  {
+   "k": 132,
+   "uri": "g0/seg_2.ts",
+   "tag": false,
+   "dseq": 26
+  },
+  {
+   "k": 133,
+   "uri": "g0/seg_3.ts",
+   "tag": false,
+   "dseq": 26
+  },
+  {
+   "k": 134,
+   "uri": "g0/seg_4.ts",
+   "tag": false,
+   "dseq": 26
+  },
+  {
+   "k": 135,
+   "uri": "g1/seg_0.ts",
+   "tag": true,
+   "dseq": 26
+  },
+  {
+   "k": 136,
+   "uri": "g1/seg_1.ts",
+   "tag": false,
+   "dseq": 27
+  },
+  {
+   "k": 137,
+   "uri": "g1/seg_2.ts",
+   "tag": false,
+   "dseq": 27
+  },
+  {
+   "k": 138,
+   "uri": "g1/seg_3.ts",
+   "tag": false,
+   "dseq": 27
+  },
+  {
+   "k": 139,
+   "uri": "g1/seg_4.ts",
+   "tag": false,
+   "dseq": 27
+  },
+  {
+   "k": 140,
+   "uri": "g2/seg_0.ts",
+   "tag": true,
+   "dseq": 27
+  },
+  {
+   "k": 141,
+   "uri": "g2/seg_1.ts",
+   "tag": false,
+   "dseq": 28
+  },
+  {
+   "k": 142,
+   "uri": "g2/seg_2.ts",
+   "tag": false,
+   "dseq": 28
+  },
+  {
+   "k": 143,
+   "uri": "g2/seg_3.ts",
+   "tag": false,
+   "dseq": 28
+  },
+  {
+   "k": 144,
+   "uri": "g2/seg_4.ts",
+   "tag": false,
+   "dseq": 28
+  },
+  {
+   "k": 145,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 28
+  },
+  {
+   "k": 146,
+   "uri": "f0/seg_0.ts",
+   "tag": true,
+   "dseq": 29
+  },
+  {
+   "k": 147,
+   "uri": "f0/seg_1.ts",
+   "tag": false,
+   "dseq": 30
+  },
+  {
+   "k": 148,
+   "uri": "f0/seg_2.ts",
+   "tag": false,
+   "dseq": 30
+  },
+  {
+   "k": 149,
+   "uri": "f0/seg_3.ts",
+   "tag": false,
+   "dseq": 30
+  },
+  {
+   "k": 150,
+   "uri": "f1/seg_0.ts",
+   "tag": true,
+   "dseq": 30
+  },
+  {
+   "k": 151,
+   "uri": "f1/seg_1.ts",
+   "tag": false,
+   "dseq": 31
+  },
+  {
+   "k": 152,
+   "uri": "f1/seg_2.ts",
+   "tag": false,
+   "dseq": 31
+  },
+  {
+   "k": 153,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 31
+  },
+  {
+   "k": 154,
+   "uri": "f0/seg_0.ts",
+   "tag": true,
+   "dseq": 32
+  },
+  {
+   "k": 155,
+   "uri": "f0/seg_1.ts",
+   "tag": false,
+   "dseq": 33
+  },
+  {
+   "k": 156,
+   "uri": "f0/seg_2.ts",
+   "tag": false,
+   "dseq": 33
+  },
+  {
+   "k": 157,
+   "uri": "f0/seg_3.ts",
+   "tag": false,
+   "dseq": 33
+  },
+  {
+   "k": 158,
+   "uri": "f1/seg_0.ts",
+   "tag": true,
+   "dseq": 33
+  },
+  {
+   "k": 159,
+   "uri": "f1/seg_1.ts",
+   "tag": false,
+   "dseq": 34
+  },
+  {
+   "k": 160,
+   "uri": "f1/seg_2.ts",
+   "tag": false,
+   "dseq": 34
+  },
+  {
+   "k": 161,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 34
+  },
+  {
+   "k": 162,
+   "uri": "f0/seg_0.ts",
+   "tag": true,
+   "dseq": 35
+  },
+  {
+   "k": 163,
+   "uri": "f0/seg_1.ts",
+   "tag": false,
+   "dseq": 36
+  },
+  {
+   "k": 164,
+   "uri": "f0/seg_2.ts",
+   "tag": false,
+   "dseq": 36
+  },
+  {
+   "k": 165,
+   "uri": "f0/seg_3.ts",
+   "tag": false,
+   "dseq": 36
+  },
+  {
+   "k": 166,
+   "uri": "f1/seg_0.ts",
+   "tag": true,
+   "dseq": 36
+  },
+  {
+   "k": 167,
+   "uri": "f1/seg_1.ts",
+   "tag": false,
+   "dseq": 37
+  },
+  {
+   "k": 168,
+   "uri": "f1/seg_2.ts",
+   "tag": false,
+   "dseq": 37
+  },
+  {
+   "k": 169,
+   "uri": "s/seg_0.ts",
+   "tag": true,
+   "dseq": 37
+  },
+  {
+   "k": 170,
+   "uri": "f0/seg_0.ts",
+   "tag": true,
+   "dseq": 38
+  },
+  {
+   "k": 171,
+   "uri": "f0/seg_1.ts",
+   "tag": false,
+   "dseq": 39
+  },
+  {
+   "k": 172,
+   "uri": "f0/seg_2.ts",
+   "tag": false,
+   "dseq": 39
+  },
+  {
+   "k": 173,
+   "uri": "f0/seg_3.ts",
+   "tag": false,
+   "dseq": 39
+  },
+  {
+   "k": 174,
+   "uri": "f1/seg_0.ts",
+   "tag": true,
+   "dseq": 39
+  }
+ ]
+}

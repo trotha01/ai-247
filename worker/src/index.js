@@ -31,6 +31,20 @@ export default {
       });
     }
 
+    if (url.pathname === "/history.json") {
+      // Read-only view of the episode history in D1 (docs/TOPICS.md): newest first, at most 200 entries.
+      if (!env.DB) return text("no history database bound", 404, { "cache-control": "no-store" });
+      const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") || 50) || 50));
+      try {
+        const { results } = await env.DB.prepare("SELECT entry FROM episodes ORDER BY ts DESC LIMIT ?").bind(limit).all();
+        const episodes = results.map((r) => { try { return JSON.parse(r.entry); } catch { return null; } }).filter(Boolean);
+        const body = JSON.stringify({ count: episodes.length, episodes }, null, 1) + "\n";
+        return new Response(request.method === "HEAD" ? null : body, { headers: { ...CORS, "content-type": "application/json", "cache-control": "no-store" } });
+      } catch (e) {
+        return text(`history unavailable: ${e && e.message ? e.message : e}`, 503, { "cache-control": "no-store" });
+      }
+    }
+
     if (url.pathname.startsWith("/seg/")) {
       const rel = decodeURIComponent(url.pathname.slice(5));
       if (!/^[A-Za-z0-9_.\-\/]+\.ts$/.test(rel) || rel.includes("..") || rel.startsWith("/")) return text("bad segment path", 400);

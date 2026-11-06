@@ -117,6 +117,34 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: worker/package-lock.json
+      - name: D1 history database (look up by name, create if missing, write the id into wrangler.toml, migrate)
+        # docs/TOPICS.md "Persistence". Needs the token permission Account -> D1 -> Edit. Without it the step warns,
+        # removes the [[d1_databases]] block so the Worker still deploys (without /history.json), and the day1 job
+        # falls back to the R2 history mirror. The database id is not a secret; the account id is never printed.
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          cd worker && npm ci --silent
+          id=$(npx wrangler d1 list --json 2>/dev/null | python3 -c "import json,sys; print(next((d['uuid'] for d in json.load(sys.stdin) if d['name']=='ai247-history'), ''))" 2>/dev/null)
+          if [ -z "$id" ]; then
+            npx wrangler d1 create ai247-history >/dev/null 2>&1
+            id=$(npx wrangler d1 list --json 2>/dev/null | python3 -c "import json,sys; print(next((d['uuid'] for d in json.load(sys.stdin) if d['name']=='ai247-history'), ''))" 2>/dev/null)
+          fi
+          if [ -z "$id" ]; then
+            echo "::warning::D1 unavailable to this token (needs Account -> D1 -> Edit on CLOUDFLARE_API_TOKEN): deploying the Worker without the history binding"
+            python3 - <<'PY'
+          import re; p="wrangler.toml"; s=open(p).read()
+          s=re.sub(r"\[\[d1_databases\]\][^\[]*", "", s); open(p,"w").write(s)
+          PY
+            exit 0
+          fi
+          sed -i "s/^database_id = .*/database_id = \"$id\"/" wrangler.toml
+          echo "D1 ai247-history database_id=$id"
+          npx wrangler d1 migrations apply ai247-history --remote || echo "::warning::D1 migrations apply failed; the day1 job creates the tables itself (IF NOT EXISTS)"
+
       - name: Deploy Worker
         id: deploy
         if: steps.gate.outputs.ready == 'true'
