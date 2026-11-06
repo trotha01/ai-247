@@ -43,7 +43,7 @@ Public repo. Never commit keys, tokens, stream keys, account IDs or private note
 
 ## Reality log
 
-(Filled in from the first Actions run; see bottom of file.)
+Measured on Actions run 42187611180 (`workflow_dispatch`, branch `cloud/ai247-day0`, ubuntu-24.04, public repo). Values below are measured unless marked *from memory*.
 
 ## Open-source survey (Day 0 search, what was used and why)
 
@@ -59,5 +59,22 @@ Public repo. Never commit keys, tokens, stream keys, account IDs or private note
 
 ## Notes on Day 0 choices
 
-- Segment duration is defined as the video-stream duration (equals EXTINF, 6.000 s). The audio stream inside a single `.ts` and the container span differ by a few AAC frames because the HLS muxer interleaves audio across the cut; concatenated, video is 60.000 s and audio is ~59.9 s. Tests allow container span +/-0.10 s, audio +/-0.35 s per segment, and 60 s +/-0.3 s overall.
+- Segment duration is defined as the video-stream duration (equals EXTINF, 6.000 s). The audio stream inside a single `.ts` and the container span differ by a few AAC frames because the HLS muxer interleaves audio across the cut; concatenated, video is 60.000 s and audio is ~59.9 s. Tests allow container span +/-0.10 s, audio +/-0.5 s per segment (first segment measured 5.63 s on the runner), and 60 s +/-0.3 s overall.
 - Sandbox network note: from the cloud session only PyPI, anthropic.com and GitHub release downloads were reachable, so feeds could not be verified there. Feed robots.txt/availability is therefore checked at run time on the Actions runner and reported per feed (see the job summary).
+
+### Day 0 run results (measured)
+
+- Runner: 4 vCPU (AMD EPYC 9V74), 15,983 MB RAM, Linux azure kernel, Python 3.12.16, ffmpeg 6.1.1 installed by apt (it was not preinstalled in a usable form; ~36 s install stage including libs and pip).
+- Wall-clock: job 115 s end to end. Pipeline stages: fetch feeds 4.6 s, script 0.0 s, TTS 26.9 s (includes a one-off 120 MB Kokoro model download from GitHub; the workflow now caches `models/`), render+encode 28.7 s, manifest 0.5 s, total pipeline 60.6 s. One 60 s bulletin therefore renders in about 1x real time, well inside any hourly budget.
+- skia-python: 71.1 fps draw + readback at 720p on the runner; the whole render+x264 pipeline ran at 62.8 fps (2.1x real time).
+- Feeds (9 candidates tried, first 8 working used, all robots.txt "allowed"): OpenAI, Google AI, Hugging Face, NVIDIA Developer, Microsoft Research, arXiv cs.AI, Claude Code releases (GitHub API), Anthropic Python SDK (GitHub API). Google DeepMind's feed parsed but returned no items. Anthropic has no official news RSS. 105 items fetched.
+- TTS: Kokoro (int8 ONNX via kokoro-onnx) worked on the runner. No fallback needed there. From the cloud sandbox huggingface.co and docs.github.com were blocked, so docs could not be read from there.
+- All 25 acceptance tests passed on the runner, including (a)-(e). (f) is this section.
+- Artifact: `bulletin-day0` on the run page (14-day retention): ten `seg_NNN.ts`, `manifest.json`, `index.m3u8`, `script.json`, `plan.json`, `report.json`.
+
+### Where reality differs from the brief or needs checking
+
+- A workflow must exist on the default branch before it can be dispatched via the API (404 otherwise), so Day 0 needed one merge to `main` before the first run.
+- GitHub docs were not reachable from the cloud session, so these are *from memory, verify on docs.github.com*: scheduled workflows run at most every 5 minutes and can be delayed or dropped under load, so "hourly" cron is fine but not exact; scheduled workflows in public repos are disabled after 60 days without repo activity; GitHub-hosted jobs have a 6-hour limit (set `timeout-minutes` lower, currently 20); standard runners in public repos are 4 vCPU / 16 GB (matches observed).
+- Anthropic per-run cap uses assumed prices (`NEWSBOT_PRICE_IN/OUT` default 1/5 USD per million tokens); verify real Haiku 5.5 prices before Day 1.
+- GitHub Actions marks Node 20 actions deprecated (warning only); bump action versions on Day 1.

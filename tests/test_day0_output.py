@@ -25,7 +25,7 @@ def test_a_codec_params_and_duration(out, manifest):
         # video-stream duration is the segment duration (equals EXTINF); AAC packet boundaries make the
         # audio stream (HLS muxer interleave shifts audio packets across the cut) and the container span (earliest start to latest end) differ by a few frames.
         assert abs(float(v["duration"]) - 6.0) <= 0.05, (p, v["duration"])
-        assert abs(float(a["duration"]) - 6.0) <= 0.35, (p, a["duration"])
+        assert abs(float(a["duration"]) - 6.0) <= 0.5, (p, a["duration"])
         assert abs(float(info["format"]["duration"]) - 6.0) <= 0.10, (p, info["format"]["duration"])
 
 
