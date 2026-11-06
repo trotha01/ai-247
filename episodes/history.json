@@ -1,0 +1,5 @@
+{
+  "note": "One entry per published episode, appended by the day1-episode workflow (docs/TOPICS.md). Used to dedupe topics and story URLs. Safe to hand-edit.",
+  "version": 1,
+  "episodes": []
+}

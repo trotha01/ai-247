@@ -18,12 +18,29 @@ on:
         default: "on"
         type: choice
         options: ["on", "off"]
+      mode:
+        description: "topic = research one topic (docs/TOPICS.md); feeds = the old general digest"
+        required: false
+        default: "topic"
+        type: choice
+        options: ["topic", "feeds"]
+      topic:
+        description: "Force a topic id from topics/topics.json (blank = best freshness x novelty score)"
+        required: false
+        default: ""
+        type: string
+      plan_model:
+        description: "Model for the one topic plan call (writer/checker stay on Haiku)"
+        required: false
+        default: "claude-haiku-5-5"
+        type: choice
+        options: ["claude-haiku-5-5", "claude-sonnet-5-5"]
   schedule:
     - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
 
 permissions:
-  contents: read
-  actions: read   # only to fetch earlier episode artifacts for the replay pool
+  contents: write  # the run commits episodes/history.json (+ topics/topics.json when a topic is discovered) back to its branch
+  actions: read    # to fetch earlier episode artifacts for the replay pool
 
 concurrency:
   group: day1-episode
@@ -88,6 +105,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEWSBOT_NO_LLM: ${{ inputs.llm == 'off' && '1' || '' }}
+          # Topic research stage (docs/TOPICS.md). Cron: topic mode unless the repo variable DAY1_TOPIC_MODE is "off".
+          NEWSBOT_TOPIC_MODE: ${{ (inputs.mode == 'feeds' || vars.DAY1_TOPIC_MODE == 'off') && 'off' || 'on' }}
+          NEWSBOT_TOPIC: ${{ inputs.topic }}
+          NEWSBOT_PLAN_MODEL: ${{ inputs.plan_model || 'claude-haiku-5-5' }}
         run: |
           start=$SECONDS
           replay=""
@@ -100,7 +121,7 @@ jobs:
         run: cat out1/report.json | head -c 6000 || true
 
       - name: Tests (Day 1 units + seam on the real render)
-        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py
 
       - name: Publish to R2 (segments first, root manifest.json last; skipped without the R2 secrets)
         # Only after the render passed its tests. Layout: docs/R2_LAYOUT.md (B) + docs/MANIFEST-SWAP.md.
@@ -112,6 +133,31 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m newsbot.publish out1
+
+      - name: Record the episode (episodes/history.json, discovered topics) and commit it back
+        # Dedupe memory for the next run (docs/TOPICS.md). Also mirrored to R2 as episodes/history.json so a failed
+        # push only costs the git copy. A push by GITHUB_TOKEN triggers no other workflow. Never force-pushes.
+        timeout-minutes: 5
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          python -m newsbot.topics record out1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add episodes/history.json topics/topics.json
+          if git diff --cached --quiet; then echo "history unchanged"; exit 0; fi
+          topic=$(python -c "import json;print((json.load(open('out1/episode/script.json')).get('topic') or {}).get('id') or 'general')")
+          git commit -q -m "episode: record run ${GITHUB_RUN_ID} (topic ${topic}) [skip ci]"
+          for attempt in 1 2 3; do
+            if git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then
+              echo "history pushed to $GITHUB_REF_NAME"; exit 0
+            fi
+            echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
+          done
+          echo "::warning::history push failed; the entry is in the R2 mirror and the artifact"
 
       - name: Job summary
         if: always()

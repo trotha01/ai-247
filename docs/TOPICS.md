@@ -21,16 +21,19 @@ Haiku writer + fact check (unchanged) -> episode -> R2.
    its own sources. Items already covered (URL in history) are dropped.
 2. **Score** = freshness x novelty x lane weight, deterministic, no LLM, written to `episode/topic_pick.json`:
    - freshness: sum over the topic's uncovered items of `0.5^(age_h/48)` (same decay as `rank.py`), capped at 8;
-   - novelty: 1.0 if the topic has never aired; otherwise `0.5^(episodes since it last aired / N)` and, if it
-     aired within the last N episodes, it is **blocked** unless at least `min_new_items_to_repeat` uncovered items
-     are newer than that episode (that is "genuinely new news");
+   - novelty: 1.0 if the topic has never aired or last aired N or more episodes ago; otherwise
+     `(episodes since it aired + 1) / (N + 1)`, and a topic that aired within the last N episodes is **blocked**
+     unless at least `min_new_items_to_repeat` uncovered items are newer than that episode ("genuinely new news");
    - lane weight: seed 1.0, discovered 0.9.
-   A topic with fewer than `min_items` (5) uncovered items is not pickable. If nothing is pickable the run
-   falls back to today's general rundown (`topic: null`, reported as `feeds` mode), so the channel never goes dark.
-3. **Research**: for the picked topic's top items (rank order), fetch the primary source (article page, arXiv
-   abstract, GitHub release body) politely (robots.txt, UA, 20 s timeout, 1 MB cap, 8 fetches max), extract text,
-   and replace the short feed summary with up to 6,000 characters of it. Every sentence is still written from
-   that one source and fact-checked against it; nothing changes in the gate.
+   A topic with fewer than `min_items` (5) uncovered items is not pickable (the workflow input `topic` forces one
+   anyway). If nothing is pickable the run falls back to today's general rundown minus covered URLs
+   (`topic: null`, reported as `feeds` mode), so the channel never goes dark.
+3. **Research**: the topic's items are ranked with `rank.py` (per-source cap 4, lifted when the topic lives on one
+   or two sources), then for the top items the primary source (article page, arXiv abstract; GitHub release
+   bodies are already primary) is fetched politely (robots.txt, the newsbot UA, 20 s timeout, 1 MB cap, 8 fetches
+   per run), reduced to its main text, and used instead of the short feed summary when it is longer: up to 6,000
+   characters reach the writer and checker (3,500 in feeds mode). Every sentence is still written from that one
+   source and fact-checked against it; nothing changes in the gate.
 4. **Plan call** (one call, default Claude Haiku 5.5; `NEWSBOT_PLAN_MODEL=claude-sonnet-5-5` switches it): given
    the topic and the candidate titles, return the story order and a two-sentence spoken framing intro that must
    contain no number or named entity not present in the sources (deterministic check; on failure the fixed
@@ -48,6 +51,14 @@ per run. The plan and discovery calls use the same meter. Longer source text (6,
 writer+checker input: estimate 0.010-0.020 USD per episode on Haiku (today 0.005); Sonnet for the plan call adds
 about 0.01. With the 3-hourly cron (8 runs/day): about 0.10-0.20 USD/day, 3-6 USD/month, under the 10 USD cap.
 Measured cost per episode is in `report.json` (`llm.cost_usd_estimate`, split by call kind) and the job summary.
+
+## Outputs
+
+`episode/topic_pick.json` (scores of every topic, the pick, fetch reports, the plan and discovery results),
+`script.json` gains `topic`, `rundown_title` and the planned `intro`; `report.json` gains `topic` and
+`llm.cost_by_kind` (write / check / repair / plan / discover). The job summary shows the topic, sources read,
+plan model, discovery outcome and the cost split. Workflow inputs: `mode` (topic | feeds), `topic` (force an id),
+`plan_model`. Fixture runs (`--items-json`) fetch nothing.
 
 ## Persistence
 

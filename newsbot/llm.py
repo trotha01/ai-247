@@ -24,26 +24,46 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+def prices_for(model: str | None) -> tuple[float, float]:
+    """(input, output) USD per MTok. The run's default model uses the (env-overridable) PRICE_IN/OUT."""
+    if not model or model == MODEL:
+        return PRICE_IN, PRICE_OUT
+    return PRICES.get(model, (2.0, 10.0))
+
+
 class Meter:
+    """Per-run spend, shared by every call of the run (writer, checker, repair, topic plan, discovery)."""
     def __init__(self):
         self.usd, self.calls, self.tokens_in, self.tokens_out = 0.0, 0, 0, 0
+        self.by_kind: dict[str, float] = {}
 
-    def cost(self, tin, tout):
-        return (tin * PRICE_IN + tout * PRICE_OUT) / 1e6
+    def cost(self, tin, tout, model=None):
+        pin, pout = prices_for(model)
+        return (tin * pin + tout * pout) / 1e6
 
-    def preflight(self, prompt_chars, max_tokens):
+    def preflight(self, prompt_chars, max_tokens, model=None):
         """Refuse a call whose worst case (all max_tokens used) would cross the cap."""
-        worst = self.cost(int(prompt_chars / 2.5) + 50, max_tokens)  # chars/2.5: conservative token estimate
+        worst = self.cost(int(prompt_chars / 2.5) + 50, max_tokens, model)  # chars/2.5: conservative token estimate
         if self.usd + worst > MAX_RUN_USD:
             raise BudgetExceeded(f"next call could cost {worst:.4f} USD on top of {self.usd:.4f}; cap is {MAX_RUN_USD}")
 
-    def add(self, usage):
+    def add(self, usage, model=None, kind="write"):
         self.calls += 1
         self.tokens_in += usage.input_tokens
         self.tokens_out += usage.output_tokens
-        self.usd += self.cost(usage.input_tokens, usage.output_tokens)
+        c = self.cost(usage.input_tokens, usage.output_tokens, model)
+        self.usd += c
+        self.by_kind[kind] = round(self.by_kind.get(kind, 0.0) + c, 6)
         if self.usd > MAX_RUN_USD:
             raise BudgetExceeded(f"run cost {self.usd:.4f} USD exceeds cap {MAX_RUN_USD}")
+
+
+def make_client(max_retries: int = 2):
+    """The Anthropic client, or None when the key is absent or NEWSBOT_NO_LLM is set (extractive path)."""
+    if os.environ.get("NEWSBOT_NO_LLM") or not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    import anthropic  # lazy: only needed on this path
+    return anthropic.Anthropic(max_retries=max_retries)
 
 
 def _ask(client, meter, system, user, max_tokens=300) -> str:
@@ -127,13 +147,14 @@ def _json(text: str):
     return json.loads(m.group(0))
 
 
-def _call(client, meter, system, user, max_tokens, effort=None) -> str:
-    meter.preflight(len(system) + len(user), max_tokens)
-    kw = dict(model=MODEL, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}])
+def _call(client, meter, system, user, max_tokens, effort=None, model=None, kind="write") -> str:
+    model = model or MODEL
+    meter.preflight(len(system) + len(user), max_tokens, model)
+    kw = dict(model=model, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}])
     if effort:
         kw["output_config"] = {"effort": effort}
     r = client.messages.create(**kw)
-    meter.add(r.usage)
+    meter.add(r.usage, model, kind)
     return "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
 
 
@@ -141,7 +162,7 @@ def fact_check(client, meter, source_text: str, sentences: list[str]) -> list[di
     """Fresh-context check of every sentence. Returns [{supported: bool, reason: str}] aligned with input.
     A sentence the model does not return a verdict for counts as unsupported."""
     numbered = "\n".join(f"{i}. {s}" for i, s in enumerate(sentences))
-    reply = _json(_call(client, meter, CHECKER_SYS, f"SOURCE:\n{source_text}\n\nSENTENCES:\n{numbered}", CHECK_MAX_TOKENS, effort="medium"))
+    reply = _json(_call(client, meter, CHECKER_SYS, f"SOURCE:\n{source_text}\n\nSENTENCES:\n{numbered}", CHECK_MAX_TOKENS, effort="medium", kind="check"))
     got = {v.get("i"): v for v in reply.get("verdicts", []) if isinstance(v, dict)}
     out = []
     for i in range(len(sentences)):
@@ -161,9 +182,12 @@ def _gate(client, meter, source_text, texts):
     return res
 
 
-def write_story(client, meter, item, stats):
+SRC_CHARS = 3500   # source text given to the writer/checker; the topic stage passes more (primary-source text)
+
+
+def write_story(client, meter, item, stats, src_chars: int = SRC_CHARS):
     """Writer -> checker -> one repair round -> drop. Returns a story dict (never contains unsupported text)."""
-    src = f"{item.title}. {item.summary}"[:3500]
+    src = f"{item.title}. {item.summary}"[:src_chars]
     draft = _json(_call(client, meter, WRITER_SYS, f"SOURCE:\n{src}", WRITE_MAX_TOKENS, effort=EFFORT))
     head = str(draft.get("headline", "")).strip()
     sents = [str(s).strip() for s in draft.get("sentences", []) if str(s).strip()][: sm.MAX_STORY_SENTENCES]
@@ -178,7 +202,7 @@ def write_story(client, meter, item, stats):
     if bad:  # one repair round, re-checked from scratch
         listing = "\n".join(f"- {t}  [rejected because: {why}]" for t, why in bad)
         try:
-            rew = _json(_call(client, meter, REPAIR_SYS, f"SOURCE:\n{src}\n\nREJECTED:\n{listing}", WRITE_MAX_TOKENS, effort=EFFORT)).get("rewrites", [])
+            rew = _json(_call(client, meter, REPAIR_SYS, f"SOURCE:\n{src}\n\nREJECTED:\n{listing}", WRITE_MAX_TOKENS, effort=EFFORT, kind="repair")).get("rewrites", [])
         except BudgetExceeded:
             raise
         except Exception:
@@ -201,25 +225,25 @@ def write_story(client, meter, item, stats):
                          flags=[{"supported": True, "method": m} for _, m in kept])
 
 
-def write_episode_script(items, counts, client=None):
+def write_episode_script(items, counts, client=None, meter=None, src_chars: int = SRC_CHARS):
     """Day 1 LLM path. Returns (script_or_None, stats). None only if no key/client.
     Items whose LLM story fails fall back to a verbatim extractive story, so every aired sentence is sourced.
-    On BudgetExceeded the remaining items use the extractive writer and stats['budget_abort'] is set."""
+    On BudgetExceeded the remaining items use the extractive writer and stats['budget_abort'] is set.
+    `meter` lets the caller share one per-run budget with earlier calls (topic plan, discovery)."""
     if client is None:
-        if os.environ.get("NEWSBOT_NO_LLM") or not os.environ.get("ANTHROPIC_API_KEY"):
+        client = make_client()
+        if client is None:
             return None, {"used": False}
-        import anthropic
-        client = anthropic.Anthropic(max_retries=2)
-    meter = Meter()
+    meter = meter or Meter()
     stats = {"used": True, "model": MODEL, "drafted": 0, "supported_first_pass": 0, "rewritten": 0,
              "rewritten_supported": 0, "dropped": 0, "llm_stories": 0, "fallback_stories": 0,
-             "budget_abort": False, "api_error": None}
+             "budget_abort": False, "api_error": None, "source_chars": src_chars}
     stories, llm_ok = [], True
     for it in items:
         story = None
         if llm_ok:
             try:
-                story = write_story(client, meter, it, stats)
+                story = write_story(client, meter, it, stats, src_chars)
                 stats["llm_stories"] += 1
             except BudgetExceeded as e:
                 llm_ok, stats["budget_abort"] = False, True
@@ -234,7 +258,7 @@ def write_episode_script(items, counts, client=None):
             story = sm.extractive_story(it)
             stats["fallback_stories"] += 1
         stories.append(story)
-    stats.update({"cost_usd_estimate": round(meter.usd, 5), "api_calls": meter.calls,
+    stats.update({"cost_usd_estimate": round(meter.usd, 5), "cost_by_kind": dict(meter.by_kind), "api_calls": meter.calls,
                   "tokens_in": meter.tokens_in, "tokens_out": meter.tokens_out, "max_run_usd": MAX_RUN_USD,
                   "price_in_per_mtok": PRICE_IN, "price_out_per_mtok": PRICE_OUT})
     by = f"{MODEL}+factcheck" if stats["llm_stories"] else "extractive"

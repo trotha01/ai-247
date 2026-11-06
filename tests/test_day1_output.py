@@ -35,8 +35,23 @@ def test_manifest_hashes_and_segment_durations(d):
 
 def test_rundown_10_to_12_stories_from_multiple_sources(d):
     n = len(d["script"]["stories"])
-    assert 10 <= n <= 12, n
-    assert len({s["source"] for s in d["script"]["stories"]}) >= 4
+    if d["script"].get("topic"):   # topic episode: one subject, fewer and deeper stories (docs/TOPICS.md)
+        assert 5 <= n <= 12, n
+        assert len({s["source"] for s in d["script"]["stories"]}) >= 2
+    else:
+        assert 10 <= n <= 12, n
+        assert len({s["source"] for s in d["script"]["stories"]}) >= 4
+
+
+def test_topic_episode_is_on_topic_and_not_a_repeat(d):
+    t = d["script"].get("topic")
+    if not t:
+        pytest.skip("not a topic episode")
+    pick = json.loads((EP / "topic_pick.json").read_text())
+    assert pick["topic"]["id"] == t["id"] and pick["mode"] == "topic"
+    sc = next(s for s in pick["scores"] if s["id"] == t["id"])
+    assert sc["blocked"] is None and sc["score"] > 0
+    assert d["report"]["topic"]["id"] == t["id"]
 
 
 def test_zero_unsourced_items_and_every_claim_scene_has_citation(d):
