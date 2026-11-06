@@ -36,13 +36,22 @@ jobs:
           cache: pip
 
       - name: Install system + python deps
+        # Hung twice for 20+ min with no output after apt finished (pip -q downloading large wheels), so: hard
+        # step timeout, bounded apt/pip network timeouts, and up to 3 attempts of the whole step body.
+        timeout-minutes: 8
         run: |
           start=$SECONDS
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
-          command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg
-          pip install -q -r requirements.txt
-          echo "install stage: $((SECONDS-start)) s"
+          APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for attempt in 1 2 3; do
+            if $APT update -qq \
+               && $APT install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng \
+               && { command -v ffmpeg >/dev/null || $APT install -y -qq ffmpeg; } \
+               && timeout 300 pip install --timeout 60 --retries 3 -r requirements.txt; then
+              echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
+            fi
+            echo "install attempt $attempt failed; retrying in 10 s"; sleep 10
+          done
+          echo "install failed after 3 attempts"; exit 1
 
       - name: Cache TTS model files
         uses: actions/cache@v6

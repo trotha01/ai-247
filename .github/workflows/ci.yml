@@ -20,11 +20,20 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
+        # Same stall guard as day0/day1: this step hung >10 min on run 42208590694 (no output inside pip install -q).
+        timeout-minutes: 8
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
-          command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg
-          pip install -q -r requirements.txt
+          APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for attempt in 1 2 3; do
+            if $APT update -qq \
+               && $APT install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng \
+               && { command -v ffmpeg >/dev/null || $APT install -y -qq ffmpeg; } \
+               && timeout 300 pip install --timeout 60 --retries 3 -r requirements.txt; then
+              echo "install ok (attempt $attempt)"; exit 0
+            fi
+            echo "install attempt $attempt failed; retrying in 10 s"; sleep 10
+          done
+          echo "install failed after 3 attempts"; exit 1
       - name: Tests (no ANTHROPIC_API_KEY in this job)
         run: python -m pytest -v tests/test_day1_units.py tests/test_seam.py tests/test_units.py
 
