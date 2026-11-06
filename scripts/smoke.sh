@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Post-deploy smoke test for the fake-live HLS Worker (worker/src/index.js).
 # Usage: scripts/smoke.sh https://ai247-live.<account>.workers.dev
-# Checks: /healthz is "ok"; /live.m3u8 starts with #EXTM3U and has CORS; EXT-X-MEDIA-SEQUENCE rises
+# Checks: /healthz is "ok" (plain) or JSON with "ok": true (replay-pool failover build, docs/FAILOVER.md); /live.m3u8 starts with #EXTM3U and has CORS; EXT-X-MEDIA-SEQUENCE rises
 # between two fetches (the edge advances every segment_seconds, default 6 s); the first segment URL
 # returns 200 with a video content type. Exit 1 on any failure.
 set -euo pipefail
@@ -23,8 +23,8 @@ echo "smoke: $base"
 # 1. /healthz
 code=$(get "$base/healthz" "$tmp/h")
 [ "$code" = 200 ] || fail "/healthz returned HTTP $code"
-grep -q '^ok' "$tmp/h" || fail "/healthz body is not 'ok': $(head -c 200 "$tmp/h")"
-echo "ok: /healthz"
+grep -Eq '^ok|"ok": *true' "$tmp/h" || fail "/healthz body is not ok: $(head -c 200 "$tmp/h")"
+echo "ok: /healthz $(sed -n 's/^ *"source": *"\([^"]*\)".*/(source=\1)/p' "$tmp/h" | head -1)"
 
 # 2. /live.m3u8 (retry briefly: a fresh deploy can take a few seconds to propagate)
 for i in 1 2 3 4 5 6; do

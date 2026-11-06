@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "kind": "replay-pool",
+  "segment_seconds": 6,
+  "epoch": 1793000000,
+  "built_at": "2026-11-06T12:00:00Z",
+  "built_from": {"source": "r2", "manifest_key": "bulletins/20261106T120000Z/manifest.json"},
+  "blocks": [
+    {
+      "id": "pool-20261106T120000Z",
+      "kind": "replay",
+      "segments": [
+        {"uri": "bulletins/20261106T120000Z/seg_000.ts", "file": "seg_000.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_001.ts", "file": "seg_001.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_002.ts", "file": "seg_002.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_003.ts", "file": "seg_003.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_004.ts", "file": "seg_004.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_005.ts", "file": "seg_005.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_006.ts", "file": "seg_006.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_007.ts", "file": "seg_007.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_008.ts", "file": "seg_008.ts", "duration": 6.0},
+        {"uri": "bulletins/20261106T120000Z/seg_009.ts", "file": "seg_009.ts", "duration": 6.0}
+      ]
+    },
+    {
+      "id": "pool-slate",
+      "kind": "slate",
+      "segments": [
+        {"uri": "pool/slate/slate_000.ts", "file": "slate_000.ts", "duration": 6.0},
+        {"uri": "pool/slate/slate_001.ts", "file": "slate_001.ts", "duration": 6.0},
+        {"uri": "pool/slate/slate_002.ts", "file": "slate_002.ts", "duration": 6.0}
+      ]
+    }
+  ]
+}
