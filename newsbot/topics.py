@@ -28,7 +28,7 @@ HISTORY_KEY = "episodes/history.json"          # R2 mirror of the history (fallb
 MAX_FETCH = int(os.environ.get("NEWSBOT_MAX_FETCH", str(research.MAX_FETCH)))
 SOURCE_CHARS = int(os.environ.get("NEWSBOT_TOPIC_SOURCE_CHARS", str(research.MAX_CHARS)))
 MAX_LEADS = 3            # HN leads (no feed text) fetched before ranking so they can compete
-FRESH_CAP = 8.0
+FRESH_TOP = 12           # freshness counts the 12 freshest uncovered items (a sum over all would saturate)
 MAX_HISTORY = 500
 MAX_STORIES = 12
 PLAN_MODEL = os.environ.get("NEWSBOT_PLAN_MODEL") or llm.MODEL
@@ -107,8 +107,14 @@ def history_to_r2(h: dict, s3=None) -> None:
                   ContentType="application/json")
 
 
+def aired(h: dict) -> list[dict]:
+    """Episodes that reached the channel, oldest first. An entry whose publish was skipped or failed is kept for the
+    cost log but never counts as covered."""
+    return sorted((e for e in h.get("episodes", []) if e.get("published", True)), key=lambda e: e.get("ts", ""))
+
+
 def covered_urls(h: dict) -> set[str]:
-    return {s["url"] for e in h.get("episodes", []) for s in e.get("stories", []) if s.get("url")}
+    return {s["url"] for e in aired(h) for s in e.get("stories", []) if s.get("url")}
 
 
 # ---------------------------------------------------------------- matching and scoring
@@ -133,8 +139,7 @@ def topic_items(topic: dict, items, covered: set[str]) -> list:
 
 def _last_aired(h: dict, topic_id: str):
     """(episodes since the topic last aired, ts of that episode) or (None, None)."""
-    eps = sorted(h.get("episodes", []), key=lambda e: e.get("ts", ""))
-    for back, e in enumerate(reversed(eps)):
+    for back, e in enumerate(reversed(aired(h))):
         if e.get("topic") == topic_id:
             return back, e.get("ts", "")
     return None, None
@@ -149,11 +154,11 @@ def _ts(iso: str) -> float:
 
 def score_topic(topic: dict, items, h: dict, cfg: dict, now: float) -> dict:
     n_repeat, min_new = cfg["repeat_after_episodes"], cfg["min_new_items_to_repeat"]
-    fresh = 0.0
+    rec = []
     for i in items:
         age_h = max(0.0, (now - i.ts) / 3600.0) if i.ts else 24 * 14.0
-        fresh += 0.5 ** (age_h / rank.HALF_LIFE_H)
-    fresh = min(FRESH_CAP, fresh)
+        rec.append(0.5 ** (age_h / rank.HALF_LIFE_H))
+    fresh = sum(sorted(rec, reverse=True)[:FRESH_TOP])
     since, last_ts = _last_aired(h, topic["id"])
     new_since = sum(1 for i in items if i.ts and i.ts > _ts(last_ts)) if last_ts else len(items)
     blocked = ""

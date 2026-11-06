@@ -66,6 +66,8 @@ jobs:
         run: echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
 
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false   # the write token is used only by the record step below, never left in .git/config
 
       - uses: actions/setup-python@v7
         with:
@@ -135,7 +137,7 @@ jobs:
         run: cat out1/report.json | head -c 6000 || true
 
       - name: Tests (Day 1 units + seam on the real render)
-        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py tests/test_research.py
 
       - name: Publish to R2 (segments first, root manifest.json last; skipped without the R2 secrets)
         # Only after the render passed its tests. Layout: docs/R2_LAYOUT.md (B) + docs/MANIFEST-SWAP.md.
@@ -157,6 +159,7 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GH_PUSH_TOKEN: ${{ github.token }}
         run: |
           python -m newsbot.topics record out1
           git config user.name "github-actions[bot]"
@@ -165,8 +168,9 @@ jobs:
           if git diff --cached --quiet; then echo "history unchanged"; exit 0; fi
           topic=$(python -c "import json;print((json.load(open('out1/episode/script.json')).get('topic') or {}).get('id') or 'general')")
           git commit -q -m "episode: record run ${GITHUB_RUN_ID} (topic ${topic}) [skip ci]"
+          remote="https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"   # token only on this step's commands
           for attempt in 1 2 3; do
-            if git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then
+            if git pull -q --rebase "$remote" "$GITHUB_REF_NAME" && git push -q "$remote" "HEAD:$GITHUB_REF_NAME"; then
               echo "history pushed to $GITHUB_REF_NAME"; exit 0
             fi
             echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
@@ -176,6 +180,8 @@ jobs:
       - name: Verify live playback (site/test/e2e-live.js; skipped when nothing was published)
         # Proof that https://ai-247.pages.dev plays right now, from the runner (the cloud sandbox is not always able to
         # reach pages.dev). The new bulletin airs at the next cycle boundary, so its presence is reported, not required.
+        # continue-on-error so a flaky browser check never discards a rendered episode; the result is printed in the
+        # job summary (out1/live_check.txt) and a FAIL line there is the signal to look at.
         if: hashFiles('out1/publish.json') != ''
         continue-on-error: true
         timeout-minutes: 8

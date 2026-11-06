@@ -164,3 +164,11 @@ Live endpoint: the Worker went live at `https://ai247-live.trotha01.workers.dev`
 Before this, `/healthz` on `ai247-live` reported `pool.problem: "missing: pool/manifest.json is not in the bucket"` (checked from the cloud session at 13:04Z: this host was reachable from the sandbox this time, so the checks below are direct reads of `/healthz`, not the deploy log). Run 42222599138 of `replay-pool` on main (`source=r2`, `max_blocks=2`, publish step 51 s) wrote `pool/manifest.json`: 2 blocks, 200 segments, built from `bulletins/20261106T120928Z/` and `bulletins/20261106T115430Z/` (the two Day 1 publishes above), epoch 1793000000 (`epoch_mismatch: null`). At 13:06Z `/healthz` showed `pool.ok: true` with `source` still `live-manifest`.
 
 Kept running without a human (`docs/FAILOVER.md`, "Schedule and refresh guard"): `replay-pool` now also runs daily at 04:41 UTC and refreshes the pool from the two newest complete episodes; `newsbot/replay_pool.py` refuses to replace a good pool with an empty one, writes nothing when no complete episode exists, and skips the PutObject when the pool already lists the newest episodes. `worker/wrangler.toml` `MAX_MANIFEST_AGE_S` went from `0` to `14400`, so a live `manifest.json` older than 4 h (one missed 3-hourly `day1-episode` run plus slack) fails over to the pool and returns when a fresh manifest lands.
+
+## Topic research stage (2026-11-06)
+
+Each episode now researches one topic instead of digesting the 8 feeds: `topics/topics.json` (editable lanes,
+discovery lane adds at most one topic per day), `episodes/history.json` (dedupe, committed back by the run),
+`newsbot/topics.py`, `newsbot/research.py`, `newsbot/discovery.py`. Design, settings and the first measured
+episode (run 42229528561: topic `agent-harnesses`, 8 stories from 5 sources, 0.00586 USD) are in `docs/TOPICS.md`.
+`mode=feeds` or the repo variable `DAY1_TOPIC_MODE=off` restores the digest.

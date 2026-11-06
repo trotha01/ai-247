@@ -31,6 +31,12 @@ print("| stage | seconds |\n|---|---|")
 for k, v in r["stage_seconds"].items():
     print(f"| {k} | {v} |")
 print(f"| **total (pipeline)** | **{r['total_seconds']}** |\n")
+live = Path(sys.argv[1]) / "live_check.txt"
+if live.exists():
+    lines = [l for l in live.read_text().splitlines() if l[:4] in ("PASS", "FAIL", "INFO")]
+    bad = sum(1 for l in lines if l.startswith("FAIL"))
+    print(f"### Live playback check ({'all passed' if not bad else str(bad) + ' FAILED'})\n")
+    print("\n".join(f"- {l}" for l in lines) + "\n")
 print("| feed | ok | robots | items | note |\n|---|---|---|---|---|")
 for f in r["feeds"]:
     print(f"| {f.get('name')} | {f.get('ok')} | {f.get('robots')} | {f.get('items')} | {f.get('note')} |")

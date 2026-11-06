@@ -19,7 +19,7 @@ from . import llm
 MIN_HITS = 2
 SIMILAR = 0.5
 MAX_TITLES = 80
-MAX_TOKENS = 700
+MAX_TOKENS = 1200   # adaptive thinking tokens count as output; 700 truncated the JSON on run 42229528561
 _SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+){0,5}$")
 _STOP = {"the", "a", "an", "of", "and", "to", "in", "for", "on", "with", "ai", "models", "model", "new"}
 
