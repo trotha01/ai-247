@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #26 open (pr-review workflow, ruleset JSON, CONTRIBUTING); waiting for ci, then merge, apply ruleset, proof PR"}
+{"state":"running","msg":"Steps 1-4 landed via PR #24 (other session) and verified: /healthz live-manifest, max_age_s 14400, pool.ok. Follow-up PR (post-publish verification + guard hardening) opening from cloud/ai247-pool; done after it merges"}
