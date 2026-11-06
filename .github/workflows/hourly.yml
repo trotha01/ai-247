@@ -48,7 +48,7 @@ permissions:
   actions: read   # to download this run's own artifacts (gh run download) in the stitch job
 
 concurrency:
-  group: hourly-bulletins
+  group: episode-publish   # shared with day1-episode: both read-modify-write the root manifest.json in R2
   cancel-in-progress: false
 
 env:
@@ -182,9 +182,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Install (R2 client only)
+      - name: Install (R2 client + the planner's imports for the summary)
         timeout-minutes: 5
-        run: timeout 240 pip install --timeout 60 --retries 3 boto3
+        run: timeout 240 pip install --timeout 60 --retries 3 boto3 feedparser
       - name: Download this run's bulletins and plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -213,8 +213,9 @@ jobs:
         run: |
           first=$(echo $DIRS | cut -d' ' -f1)
           if [ -f "$first/publish.json" ]; then
-            mins=$(python -c "import json;print(json.load(open('$first/publish.json'))['fresh_minutes'])")
-            echo "new footage published this run: $mins min"
+            # rendered_minutes counts only this run's bulletins (fresh_minutes also includes blocks inherited from a pending manifest)
+            mins=$(python -c "import json;p=json.load(open('$first/publish.json'));print(p['rendered_minutes'])")
+            echo "new footage rendered and published this run: $mins min"
             python -c "import sys; sys.exit(0 if float('$mins') >= 60 else 1)" || echo "::warning::only $mins min of new footage this run (target 60): see the job summary for the slice shortfall"
           else
             echo "::warning::nothing published (R2 secrets missing or publish failed)"

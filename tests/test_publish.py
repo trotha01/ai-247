@@ -217,7 +217,17 @@ def test_pending_manifest_is_replaced_but_its_fresh_blocks_are_inherited(tmp_pat
     assert root["cycle_start_k"] == 1010 and "prev" not in root and root["cycle_start_dseq"] == 0
     assert [(b["kind"], b["id"]) for b in root["blocks"]] == [("bulletin", "P"), ("bulletin", "Q"), ("slate", "Q/slate")]
     assert root["loop_from"] == 2
-    assert json.loads((tmp_path / "q0" / "publish.json").read_text())["inherited_blocks"] == 1
+    s = json.loads((tmp_path / "q0" / "publish.json").read_text())
+    assert s["inherited_blocks"] == 1 and s["fresh_minutes"] == 0.7 and s["rendered_minutes"] == 0.3  # 7 vs 3 segments of 6 s
+
+
+def test_first_publish_without_slate_loops_the_bulletin(tmp_path):
+    out = fake_render(tmp_path / "ns")
+    (out / "slate" / "manifest.json").unlink()
+    s3 = FakeS3()
+    summary = publish.publish(out, s3, "bkt", now=NOW1)
+    root = json.loads(s3.objects["manifest.json"][0])
+    assert root["loop_from"] == 0 and [b["kind"] for b in root["blocks"]] == ["bulletin"] and summary["last_key"] == "manifest.json"
 
 
 def test_replay_cap_is_six_blocks(tmp_path):

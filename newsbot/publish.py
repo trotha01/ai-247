@@ -105,17 +105,22 @@ def publish_many(outs: list[Path], s3, bucket: str, now: float | None = None, ru
         print(f"manifest in R2 has not started yet: inheriting its {len(inherited)} fresh block(s) in front of ours")
     blocks = inherited + blocks + replay_blocks(cur, max_replays, skip=inherited)
     loop_from = len(inherited) + len(fresh)
+    if loop_from >= len(blocks):  # no slate and nothing to replay (a first publish without a slate): loop the fresh blocks
+        print("no slate and no replays: the fresh blocks loop (loop_from 0)")
+        loop_from = 0
 
     root = channel.next_manifest(cur, blocks, now, loop_from=loop_from)
     root["published"] = ts
     _put_json(s3, bucket, root, ROOT_MANIFEST, log)  # last
 
     fresh_s = sum(s["duration"] for b in blocks[:loop_from] for s in b["segments"])
+    rendered_s = sum(s["duration"] for b in fresh for s in b["segments"])
     summary = {"prefix": f"bulletins/{first}", "run_ts": ts, "objects": len(log), "bytes": sum(x["bytes"] for x in log),
                "segments": sum(1 for x in log if x["key"].endswith(".ts")), "last_key": log[-1]["key"],
                "epoch": root["epoch"], "cycle_start_k": root["cycle_start_k"], "cycle_start_dseq": root["cycle_start_dseq"],
                "loop_from": loop_from, "fresh_blocks": loop_from, "inherited_blocks": len(inherited),
                "fresh_seconds": round(fresh_s, 3), "fresh_minutes": round(fresh_s / 60, 2),
+               "rendered_minutes": round(rendered_s / 60, 2),  # this run's bulletins only (fresh_minutes adds inherited ones)
                "blocks": [(b["kind"], b["id"], len(b["segments"])) for b in blocks], "had_prev": "prev" in root,
                "keys": log}
     for out in outs:

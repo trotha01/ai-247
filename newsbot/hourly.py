@@ -169,7 +169,7 @@ def summary_markdown(plan_dir: Path, bulletin_dirs: list[Path]) -> str:
         if pub is None and (d / "publish.json").exists():
             pub = json.loads((d / "publish.json").read_text())
     out = ["## Hourly bulletins run", "",
-           f"- Run `{p['run_ts']}`: **{footage / 60:.1f} min of new footage** from {len(bulletin_dirs)} bulletin(s) "
+           f"- Run `{p['run_ts']}`: **{footage / 60:.1f} min of new footage rendered** by {len(bulletin_dirs)} bulletin(s) "
            f"({p['slices']} of {p['slices_wanted']} slices planned{'; ' + p['shortfall'] if p.get('shortfall') else ''}); "
            f"{'**below the 60-minute hourly target**' if footage < 3600 else 'meets the 60-minute hourly target'}",
            f"- Stories: {p['candidates']} candidates from {p['items_total']} items ({len([f for f in p['feeds'] if f.get('ok')])} feeds); "

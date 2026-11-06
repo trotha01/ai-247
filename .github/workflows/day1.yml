@@ -30,7 +30,7 @@ permissions:
   actions: read   # only to fetch earlier episode artifacts for the replay pool
 
 concurrency:
-  group: day1-episode
+  group: episode-publish   # shared with hourly-bulletins: both read-modify-write the root manifest.json in R2
   cancel-in-progress: false
 
 jobs:

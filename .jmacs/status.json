@@ -1,1 +1,1 @@
-{"state":"waiting","msg":"PR #33: review round 1 fixed (NEWSBOT_NO_LLM expression bug, bounded R2 listing); tests green; waiting for worker-site-e2e + claude-review on 59a9a9e, then squash-merge, dispatch hourly-bulletins on main and verify."}
+{"state":"waiting","msg":"PR #33: claude-review passed with 0 blocking; fixed its 4 non-blocking notes in one push (stitch summary deps, shared concurrency group with day1-episode, no-slate fallback, rendered vs inherited minutes). Waiting for checks on the new head, then squash-merge, dispatch, verify."}

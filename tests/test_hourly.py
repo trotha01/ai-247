@@ -128,6 +128,6 @@ def test_summary_markdown_reports_footage_cost_and_shortfall(tmp_path):
                                                       "loop_from": 2, "fresh_minutes": 20.0, "blocks": [["bulletin", "X-00", 100], ["bulletin", "X-01", 100], ["slate", "s", 5]],
                                                       "inherited_blocks": 0}))
     md = hourly.summary_markdown(plan_dir, dirs)
-    assert "**20.0 min of new footage**" in md and "below the 60-minute hourly target" in md
+    assert "**20.0 min of new footage rendered**" in md and "below the 60-minute hourly target" in md
     assert "0.0047 USD" in md and "`bulletins/X-00`" in md and "| OpenAI | True |" in md
     assert "only 24 candidate" in md
