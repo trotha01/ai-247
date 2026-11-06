@@ -224,4 +224,14 @@ The 8-14 feeds supply about 110-200 items (now up to 60 arXiv items per fetch) a
 | cost | slice 0 was the Haiku slice and was rejected by the floor; the published bulletins were extractive (0 USD). |
 | cron | the file reached `main` at 15:47Z; the 16:23Z slot produced no run (the Day 1 cron also missed its first slot). Watch 17:23Z. |
 
-**Run 2** (dispatched from `cloud/ai247-coverage` with the floor fix, 16:45Z): _numbers below._
+**Run 2: 42255030016** (`workflow_dispatch` from `cloud/ai247-coverage` a8f24ef with the floor fix, 16:43:31Z to 16:56:40Z, 13 min).
+
+| Stage | Measured |
+|---|---|
+| plan | 20 s job; the aired memory now knew run 1's stories (it read 8 manifests), 6 slices again |
+| render x 6 | slices 0, 3, 5: install 31-40 s, render 6 min 10 s to 10 min 44 s, **all tests passed with the floor of 6** (slice 3 had passed the old floor too); slices 1, 2, 4: **install stall** again. In slice 2's log apt took 3 min 13 s (16:44:05 to 16:47:18) and `pip install` then printed nothing for 5 min until the 8-minute step timeout, so no second attempt ever ran. |
+| stitch | 3 bulletins, **310 objects / 96.8 MB in 40.0 s**; root manifest `cycle_start_k` **164181 = run 1's fresh end (163981 + 200)**, i.e. the swap rule let run 1's two bulletins finish before run 2's three start; `cycle_start_dseq` 43, `loop_from` 3, 10 blocks (3 fresh, slate, 6 replays incl. run 1's two bulletins), `rendered_minutes` 30.0 -> `::warning::`; `/healthz` 905 segments / 10 blocks, uploaded 16:56:37Z |
+| coverage | **30 min**: the floor fix worked, the install stall took the other three slices. Fix: install step 20 min with every stage bounded (apt 120 s each, pip 200 s with a 20 s socket timeout and 2 retries) so a second and third attempt always fit; render job 50 min; the same guard in `ci.yml`'s two install steps, which stalled three times today as well. |
+| on air | run 1's swap verified from this session at 16:51:33Z: media sequence 163978 continuous, `EXT-X-DISCONTINUITY-SEQUENCE` 41 = the published anchor, the last three replay segments then `20261106T162623Z-00/seg_000.ts`; headless Chromium on https://ai-247.pages.dev played through it (state `live`, 12.0 s of video in 12 s, segments from both prefixes fetched with 200, 0 errors). |
+
+**Run 3** (dispatched from the branch with the install fix, 16:54Z): _numbers below._
