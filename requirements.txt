@@ -1,0 +1,8 @@
+feedparser>=6.0
+skia-python>=138
+numpy>=1.26
+kokoro-onnx>=0.5
+soundfile>=0.12
+pytest>=8
+anthropic>=0.40
+boto3>=1.34

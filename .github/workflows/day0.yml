@@ -1,0 +1,79 @@
+name: day0-bulletin
+
+# Day 0: manual trigger only (no cron). Renders one 60 s bulletin as ten 6 s HLS segments + manifest.
+on:
+  workflow_dispatch:
+    inputs:
+      tts:
+        description: "Force TTS engine (blank = kokoro with espeak-ng fallback)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", "kokoro", "espeak-ng"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: day0-bulletin
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner specs
+        run: |
+          echo "nproc: $(nproc)"; free -m; lscpu | grep -E "Model name|^CPU\(s\)"; df -h . | tail -1
+          ffmpeg -version | head -1 || true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system + python deps
+        run: |
+          start=$SECONDS
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
+          command -v ffmpeg >/dev/null || sudo apt-get install -y -qq ffmpeg
+          pip install -q -r requirements.txt
+          echo "install stage: $((SECONDS-start)) s"
+
+      - name: Cache TTS model files
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: kokoro-int8-v1.0
+
+      - name: Render bulletin
+        env:
+          # Optional secrets: empty when unset. Never echoed. The pipeline skips LLM/R2 when empty.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          start=$SECONDS
+          python -m newsbot.pipeline --out out ${{ inputs.tts != '' && format('--tts {0}', inputs.tts) || '' }}
+          echo "pipeline wall-clock: $((SECONDS-start)) s"
+
+      - name: Acceptance tests
+        run: NEWSBOT_OUT=out python -m pytest -v tests
+
+      - name: Job summary
+        if: always()
+        run: python -m newsbot.summary out >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bulletin-day0
+          path: out/
+          retention-days: 14
