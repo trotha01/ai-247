@@ -74,7 +74,8 @@
         "coding agent harness",
         "AI agent framework",
         "Claude Code OR Codex OR Gemini CLI"
-      ]
+      ],
+      "seed_urls": []
     },
     {
       "id": "ai-vfx",
@@ -144,7 +145,46 @@
         "AI visual effects",
         "video generation model",
         "generative AI film production"
-      ]
+      ],
+      "seed_urls": []
+    },
+    {
+      "id": "verified-code-generation",
+      "name": "Formally verified AI code generation",
+      "lane": "discovered",
+      "description": "A wave of techniques, benchmarks and tools that have LLM agents produce machine-checkable proofs (Dafny, Lean, Verus) alongside the code they write, so correctness is verified rather than merely tested.",
+      "keywords": [
+        "formal verification",
+        "formally verified",
+        "vericoding",
+        "dafny",
+        "lean",
+        "proof",
+        "formalization",
+        "verified code",
+        "program synthesis",
+        "specification",
+        "theorem proving",
+        "verus",
+        "pdd kit"
+      ],
+      "queries": [
+        "LLM formally verified code generation Dafny",
+        "vericoding benchmark agents",
+        "agent proof formalization Lean verification"
+      ],
+      "sources": [],
+      "seed_urls": [
+        "https://arxiv.org/abs/2611.07073",
+        "https://arxiv.org/html/2611.05590",
+        "https://arxiv.org/html/2608.21516v1",
+        "https://arxiv.org/pdf/2608.13522",
+        "https://arxiv.org/pdf/2509.22908",
+        "https://arxiv.org/pdf/2606.06523"
+      ],
+      "enabled": true,
+      "added": "2026-11-06",
+      "reason": "Three feed items today (PDD Kit, LLM-to-Dafny, proof formalization) plus 5+ recent arXiv papers on verified code synthesis benchmarks. (12 matching items/links on 2026-11-06)"
     }
   ]
 }
