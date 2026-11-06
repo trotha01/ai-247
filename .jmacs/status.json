@@ -1,1 +1,1 @@
-{"state":"running","msg":"Steps 1-4 landed via PR #24 (other session) and verified: /healthz live-manifest, max_age_s 14400, pool.ok. Follow-up PR (post-publish verification + guard hardening) opening from cloud/ai247-pool; done after it merges"}
+{"state":"running","msg":"Steps 1-4 landed via PR #24 and verified (/healthz live-manifest, max_age_s 14400, pool.ok). Follow-up PR #28 open (post-publish verification + guard hardening); waiting for ci + claude-review, then merge"}

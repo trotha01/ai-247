@@ -13,7 +13,7 @@ AI-247 "seed pool/manifest.json in R2 and schedule the replay-pool refresh": the
 - Optional proof: dispatch `replay-pool` (source=r2) once after the merge; expected `not uploading: unchanged` and the verify step green.
 
 ## Next step
-Open the PR, wait for checks, merge, set status done.
+PR #28 open; wait for ci + claude-review, merge, set status done.
 
 ## Watch for (Trevor)
 - No scheduled workflow has ever fired in this repo (0 `schedule` runs as of 13:44Z); the 3-hourly `day1-episode` cron missed 12:23Z (PR #25 touched it). With `MAX_MANIFEST_AGE_S` 14400 the channel switches to the pool when the live manifest is older than 4 h (last publish 12:10:59Z, so from about 16:11Z unless an episode lands); `/healthz` then shows `source: replay-pool`, `reason: stale: ...`, and returns on the next publish. Intended, but the first visible effect may be the pool going on air.
