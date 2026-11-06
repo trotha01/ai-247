@@ -1,0 +1,13 @@
+{
+  "note": "Feeds used by the bulletin pipeline (Day 0 run 42187611180: 8 working feeds, all robots.txt allowed). Update when newsbot/feeds.py changes.",
+  "sources": [
+    {"name": "OpenAI News", "url": "https://openai.com/news/"},
+    {"name": "Google AI Blog", "url": "https://blog.google/technology/ai/"},
+    {"name": "Hugging Face Blog", "url": "https://huggingface.co/blog"},
+    {"name": "NVIDIA Developer Blog", "url": "https://developer.nvidia.com/blog/"},
+    {"name": "Microsoft Research Blog", "url": "https://www.microsoft.com/en-us/research/blog/"},
+    {"name": "arXiv cs.AI", "url": "https://arxiv.org/list/cs.AI/recent"},
+    {"name": "Claude Code releases (GitHub)", "url": "https://github.com/anthropics/claude-code/releases"},
+    {"name": "Anthropic Python SDK releases (GitHub)", "url": "https://github.com/anthropics/anthropic-sdk-python/releases"}
+  ]
+}
