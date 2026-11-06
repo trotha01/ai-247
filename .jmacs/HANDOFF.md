@@ -14,7 +14,8 @@ AI-247 "seed pool/manifest.json in R2 and schedule the replay-pool refresh": the
 - Non-blocking review follow-ups from #28, not done (would need another ci round): pool_check.py head_object on a missing pool key prints a traceback instead of the FAIL line (job still fails); refresh_decision's exit code is chosen by substring-matching the reason text; no test for the /healthz polling loop or the R2 path of check_r2.
 
 ## Watch for (Trevor)
-- The 3-hourly day1-episode cron missed 12:23Z and no schedule run has fired in this repo yet. With MAX_MANIFEST_AGE_S 14400 the channel switches to the pool once the live manifest is older than 4 h (last publish 12:10:59Z, so from about 16:11Z unless an episode lands); /healthz then shows source replay-pool and reason stale, and returns on the next publish. Intended, but the first visible effect may be the pool going on air.
+- No `schedule` run has fired in this repo yet (0 as of 14:33Z): the 3-hourly day1-episode cron missed 12:23Z; the episode published at 14:09:22Z came from a manual dispatch (run 42229528561 at 13:56Z). With MAX_MANIFEST_AGE_S 14400 the channel switches to the pool once the live manifest is older than 4 h (from about 18:09Z unless another episode lands); /healthz then shows source replay-pool and reason stale, and returns on the next publish. Intended, but if GitHub never fires the crons the pool will be on air most of the time, and the daily pool refresh (also a cron) will not run either: check Actions for a `schedule` event after 15:23Z and 2026-11-07 04:41Z.
+- /healthz at 14:33Z: source live-manifest, manifest age 1456 s (max_age_s 14400), pool.ok true, 200 segments, failover null.
 
 ## Next step
 None. Item done. (Branch cloud/ai247-pool carries only this .jmacs state on top of main e9fdd8c.)
