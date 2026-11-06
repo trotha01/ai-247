@@ -1,1 +1,1 @@
-{"state":"running","msg":"old run cancelled; new dispatches 42203098918/42203110356 being watched"}
+{"state":"done","msg":"old run cancelled; 42203098918 succeeded with episode-day1 artifact; install stall not reproduced"}

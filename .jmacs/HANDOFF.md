@@ -1,11 +1,10 @@
 # Handoff
 ## Objective
-Cancel stalled day1-episode run 42197984840 and re-dispatch (extractive, llm=off); watch result.
+Cancel stalled day1-episode run 42197984840 and re-dispatch; report outcome.
 ## Done
-- 42197984840 confirmed in_progress on "Install system + python deps" (~28 min; job started 10:00:22Z); cancelled -> cancelled.
-- Log shows apt installing (dpkg unpack at 10:04:37Z), step is -qq so no pip/apt output after; stall point within apt/pip not determinable. Log's inputs not retrievable via API (inputs null).
-- Dispatched llm=off -> run 42203099252, but it was auto-cancelled (concurrency: pending replaced by newer pending). Two other dispatches landed same second by trotha01: 42203098918 (running) and 42203110356 (pending). Not mine to re-dispatch again.
+- 42197984840 was in_progress on "Install system + python deps" (~28 min); cancelled (conclusion cancelled). Log had no pip/apt output past dpkg unpack at 10:04Z (-qq), so apt vs pip unclear; step ran only ~38 s in the new run, so stall looks transient.
+- My dispatch (llm=off) 42203099252 was auto-cancelled by the concurrency group; two other dispatches by trotha01 landed the same second: 42203098918 (ran, success, artifact episode-day1 ~62 MB) and 42203110356 (pending/in_progress, still running).
 ## Pending
-- Watch 42203098918 / 42203110356; check install step < 10 min.
+- Nothing for me; 42203110356 is not mine.
 ## Next step
-Report outcome; if install stalls >10 min, report log and propose pip/apt timeout + cache fix (no push).
+None. Optional proposal: add timeout-minutes: 10 to the install step (and retry) so a hang fails fast.
