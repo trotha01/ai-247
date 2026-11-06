@@ -1,0 +1,15 @@
+# secrets
+.env
+.env.*
+*.key
+*.pem
+secrets/
+# build and render outputs
+out/
+dist/
+__pycache__/
+node_modules/
+*.ts
+*.m4s
+*.mp4
+.DS_Store
