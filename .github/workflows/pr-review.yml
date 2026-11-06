@@ -1,0 +1,112 @@
+name: pr-review
+
+# Claude review of every non-draft pull request, using the official anthropics/claude-code-action.
+# The job name "claude-review" is the status check the main ruleset requires (.github/rulesets/main.json);
+# the tests themselves are the `tests` and `worker-site-e2e` jobs in ci.yml, which already run on pull_request.
+#
+# Safety: `pull_request` only (no pull_request_target), so a fork PR never runs with this repo's secrets.
+# Fork PRs are skipped here (the ci.yml tests still run on them without secrets); the owner reviews those by hand.
+# Claude gets no Edit/Write tools and only three gh commands (diff, view, comment); it never runs PR code.
+#
+# Cost: Sonnet 5.5, hard cap of 1 USD per run via --max-budget-usd, 15 turns, one run per PR at a time
+# (a new push cancels the previous review). Draft PRs are skipped until marked ready. PRs that change only
+# .jmacs/** (cloud-worker status files) pass without calling Claude.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    if: >-
+      github.event.pull_request.draft == false
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MARKER: "<!-- claude-review -->"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Classify the change (status-only PRs skip the model)
+        id: classify
+        run: |
+          set -eu
+          files=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)
+          printf 'changed files:\n%s\n' "$files"
+          if [ -n "$files" ] && ! echo "$files" | grep -vq '^\.jmacs/'; then
+            echo "needs_review=false" >> "$GITHUB_OUTPUT"
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$MARKER
+          **Claude review (skipped):** this push changes only \`.jmacs/**\` status files.
+
+          Verdict: PASS"
+          else
+            echo "needs_review=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Claude review
+        if: steps.classify.outputs.needs_review == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are reviewing pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}
+            (a public repo: a code-made 24/7 AI news channel; Python pipeline in newsbot/, a Cloudflare Worker in
+            worker/, a static site in site/, GitHub Actions workflows in .github/workflows/). Secrets live only in
+            Actions secrets and must never appear in code, logs, or docs.
+
+            Steps:
+            1. Run `gh pr view ${{ github.event.pull_request.number }}` and `gh pr diff ${{ github.event.pull_request.number }}`.
+            2. Read only the changed files you need for context (the PR branch is checked out). Do not run tests or
+               any other command; CI runs them separately.
+            3. Post exactly one comment with `gh pr comment ${{ github.event.pull_request.number }} --body-file <file>`
+               (write the body to a file first). The comment must start with the line `<!-- claude-review -->`
+               and end with a line that is exactly `Verdict: BLOCK` or `Verdict: PASS`.
+
+            Comment format (keep it under 300 words):
+            **Claude review** — one-sentence summary of what the PR does.
+            **Blocking** — bullets, `path:line` first, for: bugs that break the stated behaviour, secrets or
+            tokens in the diff, workflows that would run untrusted code with secrets or deploy from a PR,
+            changes that would break main's CI, data loss on the live stream (R2 layout or manifest order).
+            Write "none" if there are none.
+            **Non-blocking** — up to 5 bullets of real improvements (clarity, missing edge case, dead code).
+            Skip style nits.
+            `Verdict: BLOCK` if the Blocking list is non-empty, otherwise `Verdict: PASS`.
+
+            Be concrete and brief. Do not restate the diff. Do not post more than one comment.
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 15
+            --max-budget-usd 1
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"
+            --disallowedTools "Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch"
+
+      - name: Verdict -> check status
+        run: |
+          set -eu
+          body=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | contains("<!-- claude-review -->"))] | last | .body // empty')
+          if [ -z "$body" ]; then
+            echo "::error::No Claude review comment found on PR #$PR (the review did not complete). Re-run this job."
+            exit 1
+          fi
+          verdict=$(printf '%s\n' "$body" | grep -oE '^Verdict: (PASS|BLOCK)' | tail -1 || true)
+          echo "latest review verdict: ${verdict:-missing}"
+          case "$verdict" in
+            "Verdict: PASS") echo "No blocking findings." ;;
+            "Verdict: BLOCK") echo "::error::Claude review found blocking issues; see the PR comment."; exit 1 ;;
+            *) echo "::error::Review comment has no Verdict line; re-run this job."; exit 1 ;;
+          esac

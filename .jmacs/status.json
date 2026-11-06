@@ -1,1 +1,1 @@
-{"state":"running","msg":"Both day1 runs published to R2 (42212912268 llm=off: 108 objects 34.1 MB; 42214045472 llm=on: 108 objects 33.5 MB, chained onto run 1 at cycle_start_k 161231). Docs PR with the PLAN.md note opening; done after it merges"}
+{"state":"blocked","msg":"Duplicate dispatch: session_01CP1hmTeuYuNokHuUpPx52n owns cloud/ai247-prwatch + PR #26 (design verified sound); this session stood down. Needs you after #26 merges: POST the ruleset and PUT collaborator EliasTheApe (login verified on prompt-desk); the cloud proxy 403s both writes."}
