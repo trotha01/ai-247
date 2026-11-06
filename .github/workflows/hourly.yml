@@ -104,7 +104,7 @@ jobs:
   render:
     needs: plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 45   # install up to 15 (slow apt mirrors when six jobs start at once) + render 25 + tests/artifact
+    timeout-minutes: 50   # install up to 20 (slow apt mirrors when six jobs start at once) + render 25 + tests/artifact
     strategy:
       fail-fast: false   # one bad slice must not cancel the others: the stitch publishes whatever rendered
       matrix:
@@ -123,15 +123,16 @@ jobs:
         # faster-failing pip: when six render jobs start at once, apt alone took 3-5 min and pip then printed nothing for
         # 5 min on 4 of 12 jobs (runs 42252356577, 42255030016), so the 8-minute step never reached a second attempt.
         # pip now gives up on a stalled connection after 20 s (2 retries, 200 s cap); each stage prints its wall-clock.
-        timeout-minutes: 15
+        # Worst case per attempt: apt 3 x 120 s + pip 200 s = 9.3 min, so 20 minutes always allows a second attempt.
+        timeout-minutes: 20
         run: |
           start=$SECONDS
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
             t0=$SECONDS
-            if timeout 240 $APT update -qq \
-               && timeout 240 $APT install -y -qq $INSTALL_PKGS \
-               && { command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg; } \
+            if timeout 120 $APT update -qq \
+               && timeout 120 $APT install -y -qq $INSTALL_PKGS \
+               && { command -v ffmpeg >/dev/null || timeout 120 $APT install -y -qq ffmpeg; } \
                && { echo "apt: $((SECONDS-t0)) s"; t1=$SECONDS; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt && echo "pip: $((SECONDS-t1)) s"; }; then
               echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
             fi
