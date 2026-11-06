@@ -1,14 +1,13 @@
-# Handoff
-
 ## Objective
-AI-247 Day 2: Cloudflare Worker in worker/ serving a clock-computed rolling fake-live HLS playlist from R2 manifest.json, with unit + wrangler dev tests. Work only in worker/ and docs/. No deploy.
+AI-247 manifest-swap continuity: Worker handles epoch/cycle_start_k so hourly manifest swaps take effect at loop boundaries; monotonic media/discontinuity sequence; spec for Day 1 uploader. Only worker/ and docs/ edited.
 
 ## Done
-- worker/src (playlist.js, index.js), wrangler.toml, 43 unit tests (golden vs Python reference) + 5 wrangler-dev tests, all pass.
-- docs/DAY2.md (behaviour, limitations, deploy checklist for Trevor).
+- worker/src/playlist.js: eras (cycle_start_k, cycle_start_dseq, prev), nextSwapStart, swapDseq.
+- worker/test/unit/swap.test.js: hourly-swap simulation with hls-parser (monotonic seq, stable URIs, discontinuities, boundary).
+- docs/MANIFEST-SWAP.md spec; DAY2.md pointer.
 
 ## Pending
-- Nothing; PR #7 merged.
+- PR merge to main (see status.json).
 
 ## Next step
-Trevor: follow the deploy checklist in docs/DAY2.md.
+Day 1 uploader implements docs/MANIFEST-SWAP.md (not edited by me).
