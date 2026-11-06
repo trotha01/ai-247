@@ -5,6 +5,7 @@ No LLM is involved (plan section 12: persistent LLM agents are out of scope).
 from __future__ import annotations
 
 import math
+import os
 import re
 import time
 
@@ -16,7 +17,7 @@ SOURCE_WEIGHTS = {
     "Claude Code releases": 0.85, "Anthropic Python SDK": 0.6, "Hugging Face": 0.8,
     "NVIDIA Developer": 0.75, "arXiv cs.AI": 0.35,
 }
-PER_SOURCE_CAP = 2
+PER_SOURCE_CAP = int(os.environ.get("NEWSBOT_PER_SOURCE_CAP", "2"))  # the hourly slices (newsbot/hourly.py) raise it to 4
 MIN_SUMMARY_CHARS = 60      # need a little text to say anything supported
 DEDUPE_JACCARD = 0.6
 

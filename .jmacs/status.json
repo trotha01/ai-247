@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #31 was green but conflicted with main (other session .jmacs files); merged main into cloud/ai247-readme, waiting for checks to re-run, then squash-merge"}
+{"state":"waiting","msg":"PR #33: claude-review passed with 0 blocking; fixed its 4 non-blocking notes in one push (stitch summary deps, shared concurrency group with day1-episode, no-slate fallback, rendered vs inherited minutes). Waiting for checks on the new head, then squash-merge, dispatch, verify."}

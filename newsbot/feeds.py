@@ -17,7 +17,8 @@ import feedparser
 UA = "ai-247-newsbot/0.1 (+https://github.com/trotha01/ai-247)"
 
 # Candidate list (more than 8: some hosts block bots or lack feeds; the first 8 that
-# pass robots.txt and return items are used). kind: "feed" | "github"
+# pass robots.txt and return items are used; the hourly planner uses every working one). kind: "feed" | "github".
+# `limit`: items read per feed (default 15); arXiv lists a whole day of submissions, each with an abstract.
 CANDIDATES = [
     {"name": "OpenAI", "kind": "feed", "url": "https://openai.com/news/rss.xml"},
     {"name": "Google DeepMind", "kind": "feed", "url": "https://deepmind.google/blog/rss.xml"},
@@ -25,7 +26,7 @@ CANDIDATES = [
     {"name": "Hugging Face", "kind": "feed", "url": "https://huggingface.co/blog/feed.xml"},
     {"name": "NVIDIA Developer", "kind": "feed", "url": "https://developer.nvidia.com/blog/feed"},
     {"name": "Microsoft Research", "kind": "feed", "url": "https://www.microsoft.com/en-us/research/feed/"},
-    {"name": "arXiv cs.AI", "kind": "feed", "url": "https://rss.arxiv.org/rss/cs.AI"},
+    {"name": "arXiv cs.AI", "kind": "feed", "url": "https://rss.arxiv.org/rss/cs.AI", "limit": 60},
     {"name": "Claude Code releases", "kind": "github", "repo": "anthropics/claude-code"},
     {"name": "Anthropic Python SDK", "kind": "github", "repo": "anthropics/anthropic-sdk-python"},
     {"name": "Ollama releases", "kind": "github", "repo": "ollama/ollama"},
@@ -153,7 +154,7 @@ def fetch_all(candidates=CANDIDATES, max_feeds: int = MAX_FEEDS, log=print):
                 hdr = {"Authorization": f"Bearer {token}"} if (c["kind"] == "github" and token) else {}
                 data = _get(url, hdr)
                 got = (parse_github_releases(c["name"], c["repo"], data) if c["kind"] == "github"
-                       else parse_feed_bytes(c["name"], data))
+                       else parse_feed_bytes(c["name"], data, int(c.get("limit", 15))))
                 rep.items, rep.ok = len(got), bool(got)
                 if got:
                     items += got
