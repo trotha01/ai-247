@@ -49,8 +49,8 @@ on:
     - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
 
 permissions:
-  contents: write  # only to commit topics/topics.json back to its branch when the discovery lane adds a topic (history is in D1)
-  actions: read    # to fetch earlier episode artifacts for the replay pool
+  contents: read
+  actions: read   # to fetch earlier episode artifacts for the replay pool (and this run's artifact in the record job)
 
 concurrency:
   group: day1-episode
@@ -170,6 +170,58 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m newsbot.publish out1
 
+      - name: Verify live playback (site/test/e2e-live.js; skipped when nothing was published)
+        # Proof that https://ai-247.pages.dev plays right now, from the runner (the cloud sandbox is not always able to
+        # reach pages.dev). The new bulletin airs at the next cycle boundary, so its presence is reported, not required.
+        # continue-on-error so a flaky browser check never discards a rendered episode; the result is printed in the
+        # job summary (out1/live_check.txt) and a FAIL line there is the signal to look at.
+        if: hashFiles('out1/publish.json') != ''
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          prefix=$(python -c "import json;print(json.load(open('out1/publish.json'))['prefix'])")
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw" && npm init -y >/dev/null && npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+          cd "$GITHUB_WORKSPACE" && NODE_PATH="$RUNNER_TEMP/pw/node_modules" node site/test/e2e-live.js --expect-prefix "$prefix" --wait-sec 0 | tee out1/live_check.txt
+
+      - name: Job summary
+        if: always()
+        run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: episode-day1
+          path: out1/
+          retention-days: 14
+
+  record:
+    # The only job with a write-capable token (docs/TOPICS.md "Persistence"): writes the episode to D1 (R2 mirror as
+    # read cache) and commits a discovered topic back to topics/topics.json when the branch allows the push. It works
+    # from this run's uploaded artifact, so the render job never holds a write token next to third-party page text.
+    needs: episode
+    if: always() && needs.episode.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false   # the write token is used only by the push command below, never left in .git/config
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (record needs only the feed/R2 client libraries)
+        timeout-minutes: 5
+        run: timeout 240 pip install --timeout 60 --retries 3 feedparser boto3 pysbd
+      - name: Download this run's episode artifact (script, report, topic_pick, publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n episode-day1 -D out1
+          ls out1 out1/episode | head -30
       - name: Record the episode in D1 (history) and commit a discovered topic back to topics.json
         # Dedupe memory for the next run (docs/TOPICS.md "Persistence"): the episode goes to Cloudflare D1 through the
         # REST API (R2 mirror episodes/history.json kept as a read cache); nothing about history is committed. Only a
@@ -201,28 +253,3 @@ jobs:
             echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
           done
           echo "::warning::topics.json push refused (expected on main: the ruleset requires PRs); the new topic is in D1 (discovered_topics) and in the artifact (out1/episode/topic_pick.json)"
-
-      - name: Verify live playback (site/test/e2e-live.js; skipped when nothing was published)
-        # Proof that https://ai-247.pages.dev plays right now, from the runner (the cloud sandbox is not always able to
-        # reach pages.dev). The new bulletin airs at the next cycle boundary, so its presence is reported, not required.
-        # continue-on-error so a flaky browser check never discards a rendered episode; the result is printed in the
-        # job summary (out1/live_check.txt) and a FAIL line there is the signal to look at.
-        if: hashFiles('out1/publish.json') != ''
-        continue-on-error: true
-        timeout-minutes: 8
-        run: |
-          prefix=$(python -c "import json;print(json.load(open('out1/publish.json'))['prefix'])")
-          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw" && npm init -y >/dev/null && npm install --silent playwright@1.55.0
-          npx playwright install --with-deps chromium >/dev/null
-          cd "$GITHUB_WORKSPACE" && NODE_PATH="$RUNNER_TEMP/pw/node_modules" node site/test/e2e-live.js --expect-prefix "$prefix" --wait-sec 0 | tee out1/live_check.txt
-
-      - name: Job summary
-        if: always()
-        run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: episode-day1
-          path: out1/
-          retention-days: 14

@@ -167,7 +167,8 @@ def _collect(resp) -> tuple[str, dict]:
 def search_call(client, meter, system: str, user: str, kind: str = "discover"):
     """One Fable call with the web search tool. Returns (text, found_urls, stop_reason). Falls back to the basic
     tool version on a 400 about the tool type; refusals return ('', {}, 'refusal')."""
-    meter.preflight(len(system) + len(user), MAX_TOKENS, DISCOVERY_MODEL)
+    # pre-flight worst case: all output tokens used AND every allowed web search made (0.01 USD each)
+    meter.preflight(len(system) + len(user), MAX_TOKENS + int(MAX_SEARCHES * llm.WEB_SEARCH_USD * 1e6 / llm.prices_for(DISCOVERY_MODEL)[1]), DISCOVERY_MODEL)
     kw = dict(model=DISCOVERY_MODEL, max_tokens=MAX_TOKENS, system=system, messages=[{"role": "user", "content": user}],
               output_config={"effort": DISCOVERY_EFFORT}, tools=[_search_tool(WEB_SEARCH_TOOL)])
     try:
