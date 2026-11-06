@@ -10,6 +10,10 @@ from newsbot import script as sm
 
 DAY1 = Path(os.environ.get("NEWSBOT_DAY1_OUT", "out1"))
 EP = DAY1 / "episode"
+# Rundown floor. 10 fits the Day 1 feed mix (short feed summaries, 12 ranked items). The hourly slices
+# (hourly.yml) carry longer source texts (arXiv abstracts, release notes), so 8-9 stories fill the 10 minutes;
+# that workflow sets NEWSBOT_MIN_STORIES=6 (the pipeline itself refuses fewer than 6 rankable items).
+MIN_STORIES = int(os.environ.get("NEWSBOT_MIN_STORIES", "10"))
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +39,7 @@ def test_manifest_hashes_and_segment_durations(d):
 
 def test_rundown_10_to_12_stories_from_multiple_sources(d):
     n = len(d["script"]["stories"])
-    assert 10 <= n <= 12, n
+    assert MIN_STORIES <= n <= 12, n
     assert len({s["source"] for s in d["script"]["stories"]}) >= 4
 
 
