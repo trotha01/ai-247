@@ -1,1 +1,1 @@
-{"state":"running","msg":"R2 publish confirmed (run 42212912268: 105 segments, root manifest.json last); smoke.sh OK on the Worker; player plays via ?src= (no errors); opening the streamUrl PR"}
+{"state": "running", "msg": "PR #20 open (cloud/ai247-failover -> main), waiting for CI (tests + worker-site-e2e), then merge; 91 Worker + 25 Python tests green locally after merging main"}
