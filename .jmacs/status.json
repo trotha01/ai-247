@@ -1,1 +1,1 @@
-{"state":"done","msg":"PR #11 green and merged: Worker PREFIX fix, e2e (real r2.upload -> local R2 -> Worker -> browser), docs/R2_LAYOUT.md, CI job. Day 1 uploader must write manifest.json last."}
+{"state":"running","msg":"PR #8 updated from main, ci re-running; day0 run 42211796435 green with r2_upload 18 s; wiring Day 1 publish (segments first, root manifest last) in a PR, then two day1 dispatches"}
