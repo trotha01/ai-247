@@ -1,1 +1,1 @@
-{"state":"running","msg":"Steps 1-4 landed via PR #24 and verified (/healthz live-manifest, max_age_s 14400, pool.ok). Follow-up PR #28 open (post-publish verification + guard hardening); waiting for ci + claude-review, then merge"}
+{"state":"running","msg":"README live-site line added on cloud/ai247-readme; opening the PR and waiting for tests, worker-site-e2e and claude-review"}
