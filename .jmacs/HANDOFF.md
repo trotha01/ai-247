@@ -7,7 +7,7 @@ AI-247 manifest-swap continuity: Worker handles epoch/cycle_start_k so hourly ma
 - docs/MANIFEST-SWAP.md spec; DAY2.md pointer.
 
 ## Pending
-- PR merge to main (see status.json).
+- Merged PR #10 to main (squash, CI green).
 
 ## Next step
 Day 1 uploader implements docs/MANIFEST-SWAP.md (not edited by me).
