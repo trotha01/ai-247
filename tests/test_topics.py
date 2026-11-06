@@ -227,6 +227,11 @@ def test_deepen_reads_leads_first_and_keeps_only_items_with_text(monkeypatch):
     assert rep["web"] == [{"api": "x"}] and len(rep["leads"]) == 1
 
 
+def test_safe_name_strips_markup_and_caps_length():
+    assert topics.safe_name("Robots <b>now</b> & \"world models\"\n" + "x" * 100) == ("Robots bnow/b & world modelsx" + "x" * 31)[:60]
+    assert topics.safe_name("AI for VFX and film and video production") == "AI for VFX and film and video production"
+
+
 def test_merge_history_unions_by_run_id():
     a = history([ep("1", "a", "2026-01-01T00:00:00Z"), ep("2", "b", "2026-01-02T00:00:00Z")])
     b = history([ep("2", "b", "2026-01-02T00:00:00Z"), ep("3", "c", "2026-01-03T00:00:00Z")])

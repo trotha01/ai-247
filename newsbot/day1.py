@@ -89,6 +89,12 @@ def main(argv=None) -> int:
 
     with tm.stage("rank"):
         ranked = tr["ranked"]
+        if ranked is not None and len(ranked) < 5:   # a thin topic (forced, or sources that failed) never darkens the channel
+            print(f"topic {tr['info'].get('topic', {}).get('id')}: only {len(ranked)} stories; falling back to the general rundown")
+            tr.update({"ranked": None, "counts": None, "script_extra": {}})
+            tr["info"].update({"mode": "feeds", "topic": None, "fallback": "too few topic stories"})
+            (ep / "topic_pick.json").write_text(json.dumps(tr["info"], indent=1, ensure_ascii=False))
+            ranked, src_chars = None, llm.SRC_CHARS
         if ranked is None:
             fresh = [i for i in items if i.url not in tr["covered"]]   # dedupe against past episodes here too
             ranked = rank.rank(fresh, N_RUNDOWN, now)
@@ -96,7 +102,7 @@ def main(argv=None) -> int:
                 ranked = rank.rank(items, N_RUNDOWN, now)
         (ep / "rank.json").write_text(json.dumps(rank.explain(ranked, now), indent=1))
         print(f"rundown: {len(ranked)} stories from {len({i.source for i in ranked})} sources; topic: {tr['info'].get('topic')}")
-        if len(ranked) < (5 if tr["ranked"] is not None else 6):
+        if len(ranked) < 6:
             print("not enough rankable items", file=sys.stderr)
             return 2
 

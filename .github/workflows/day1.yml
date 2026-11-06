@@ -47,7 +47,9 @@ on:
     - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
 
 permissions:
-  contents: write  # the run commits episodes/history.json (+ topics/topics.json when a topic is discovered) back to its branch
+  # contents: write is needed only by the record step (one job, so it cannot be scoped tighter); the checkout keeps no
+  # credentials and only that step is given the token, so the render/test steps never hold a write-capable token.
+  contents: write
   actions: read    # to fetch earlier episode artifacts for the replay pool
 
 concurrency:
@@ -125,6 +127,11 @@ jobs:
           NEWSBOT_TOPIC_MODE: ${{ (inputs.mode == 'feeds' || vars.DAY1_TOPIC_MODE == 'off') && 'off' || 'on' }}
           NEWSBOT_TOPIC: ${{ inputs.topic }}
           NEWSBOT_PLAN_MODEL: ${{ inputs.plan_model || 'claude-haiku-5-5' }}
+          # Read-only use here: the R2 mirror of episodes/history.json (dedupe survives a failed git push). Empty on forks.
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           start=$SECONDS
           replay=""
@@ -173,6 +180,7 @@ jobs:
             if git pull -q --rebase "$remote" "$GITHUB_REF_NAME" && git push -q "$remote" "HEAD:$GITHUB_REF_NAME"; then
               echo "history pushed to $GITHUB_REF_NAME"; exit 0
             fi
+            git rebase --abort 2>/dev/null || true   # a conflicted rebase must not poison the next attempt
             echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
           done
           echo "::warning::history push failed; the entry is in the R2 mirror and the artifact"
