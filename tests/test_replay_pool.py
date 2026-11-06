@@ -186,6 +186,64 @@ def test_cli_from_r2_and_dir_uploads_with_fake_client(tmp_path, monkeypatch):
     assert m["built_from"]["source"] == "r2+dir"
 
 
+def test_refresh_decision_guard():
+    good = {"blocks": [{"segments": [{"uri": "bulletins/a/seg_000.ts", "duration": 6.0}]}], "built_at": "t0"}
+    same = {"blocks": [{"segments": [{"uri": "bulletins/a/seg_000.ts", "duration": 6.0}]}], "built_at": "t1"}
+    newer = {"blocks": [{"segments": [{"uri": "bulletins/b/seg_000.ts", "duration": 6.0}]}]}
+    empty = {"kind": "replay-pool", "blocks": []}
+    zero = {"blocks": [{"segments": [{"uri": "bulletins/a/seg_000.ts", "duration": 0}]}]}
+    assert replay_pool.pool_usable(good) and not replay_pool.pool_usable(empty) and not replay_pool.pool_usable(zero) and not replay_pool.pool_usable(None)
+    assert replay_pool.refresh_decision(None, good)[0] is True            # nothing in R2 yet
+    assert replay_pool.refresh_decision(empty, good)[0] is True           # broken pool in R2 gets replaced
+    assert replay_pool.refresh_decision(good, newer)[0] is True           # newer episodes
+    go, why = replay_pool.refresh_decision(good, same)
+    assert go is False and why.startswith("unchanged")                    # same segments: no PutObject
+    assert replay_pool.refresh_decision(good, same, force=True)[0] is True
+    for bad in (empty, zero):
+        go, why = replay_pool.refresh_decision(good, bad)
+        assert go is False and "no playable segments" in why              # never replace a good pool with an empty one
+    assert replay_pool.refresh_decision(None, empty)[0] is False
+
+
+def test_scheduled_refresh_never_overwrites_a_good_pool_with_nothing(tmp_path, monkeypatch, capsys):
+    """The cron path (`--from-r2 --upload`): a good pool/manifest.json in R2 survives a run that finds nothing
+    complete, is not rewritten when the newest episodes are the ones it lists, and is replaced by newer ones."""
+    s3 = FakeS3()
+    for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(k, "fake")
+    monkeypatch.setenv("R2_BUCKET", "b")
+    monkeypatch.setattr(r2, "client", lambda: s3)
+    out = str(tmp_path / "pool.json")
+    # 1. seed: one complete episode -> published
+    r2_bulletin(s3, "20261106T090000Z")
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload"]) == 0
+    seeded = s3.objects["pool/manifest.json"]
+    assert json.loads(seeded)["blocks"][0]["id"] == "pool-20261106T090000Z" and len(s3.puts) == 1
+    # 2. the only episodes are now broken (segment gone): nothing complete -> exit 3, pool untouched
+    del s3.objects["bulletins/20261106T090000Z/seg_004.ts"]
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload"]) == 3
+    assert s3.objects["pool/manifest.json"] == seeded and len(s3.puts) == 1
+    assert "not touched" in capsys.readouterr().out
+    # 3. the episode is complete again and still the newest: unchanged -> no PutObject
+    r2_bulletin(s3, "20261106T090000Z")
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload"]) == 0
+    assert s3.objects["pool/manifest.json"] == seeded and len(s3.puts) == 1
+    assert "not uploading: unchanged" in capsys.readouterr().out
+    # 3b. --force rewrites it anyway (built_at moves, segments identical)
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload", "--force"]) == 0
+    assert len(s3.puts) == 2 and json.loads(s3.objects["pool/manifest.json"])["blocks"] == json.loads(seeded)["blocks"]
+    # 4. a newer complete episode -> the pool moves to it (max_blocks 1)
+    r2_bulletin(s3, "20261106T120000Z")
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload"]) == 0
+    m = json.loads(s3.objects["pool/manifest.json"])
+    assert [b["id"] for b in m["blocks"]] == ["pool-20261106T120000Z"] and s3.puts[-1][0] == "pool/manifest.json"
+    worker_shape_ok(m)
+    # 5. a corrupt pool object in R2 (not JSON) is replaced, not kept
+    s3.objects["pool/manifest.json"] = b"not json"
+    assert replay_pool.main(["--from-r2", "--write", out, "--upload"]) == 0
+    assert json.loads(s3.objects["pool/manifest.json"])["blocks"][0]["id"] == "pool-20261106T120000Z"
+
+
 def test_worker_fixture_matches_the_bootstrap_shape():
     """worker/test/fixtures/replay-pool.json is what the Worker tests use as the pool; keep it in the real shape."""
     fx = json.loads(Path("worker/test/fixtures/replay-pool.json").read_text())
