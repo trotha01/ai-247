@@ -1,1 +1,1 @@
-{"state":"running","msg":"Steps 1-4 landed via PR #24 and verified (/healthz live-manifest, max_age_s 14400, pool.ok). Follow-up PR #28 open (post-publish verification + guard hardening); waiting for ci + claude-review, then merge"}
+{"state": "running", "msg": "Manual day1 run 42235237153 dispatched from main (Trevor's request) and being watched; Trigger step now prints DAY1_CRON_ENABLED; PR to main next; 15:23Z cron slot still watched."}
