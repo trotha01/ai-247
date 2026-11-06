@@ -104,7 +104,7 @@ jobs:
   render:
     needs: plan
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45   # install up to 15 (slow apt mirrors when six jobs start at once) + render 25 + tests/artifact
     strategy:
       fail-fast: false   # one bad slice must not cancel the others: the stitch publishes whatever rendered
       matrix:
@@ -119,19 +119,23 @@ jobs:
         run: |
           echo "slice ${{ matrix.slice }} of $SLICES; nproc: $(nproc)"; free -m | head -2; lscpu | grep -E "Model name"; df -h . | tail -1
       - name: Install system + python deps
-        # Same stall guard as day1.yml: hard step timeout, bounded apt/pip network timeouts, up to 3 attempts.
-        timeout-minutes: 8
+        # Same stall guard as day1.yml (bounded apt/pip network timeouts, up to 3 attempts), with a wider budget and a
+        # faster-failing pip: when six render jobs start at once, apt alone took 3-5 min and pip then printed nothing for
+        # 5 min on 4 of 12 jobs (runs 42252356577, 42255030016), so the 8-minute step never reached a second attempt.
+        # pip now gives up on a stalled connection after 20 s (2 retries, 200 s cap); each stage prints its wall-clock.
+        timeout-minutes: 15
         run: |
           start=$SECONDS
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
-            if $APT update -qq \
-               && $APT install -y -qq $INSTALL_PKGS \
-               && { command -v ffmpeg >/dev/null || $APT install -y -qq ffmpeg; } \
-               && timeout 300 pip install --timeout 60 --retries 3 -r requirements.txt; then
+            t0=$SECONDS
+            if timeout 240 $APT update -qq \
+               && timeout 240 $APT install -y -qq $INSTALL_PKGS \
+               && { command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg; } \
+               && { echo "apt: $((SECONDS-t0)) s"; t1=$SECONDS; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt && echo "pip: $((SECONDS-t1)) s"; }; then
               echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
             fi
-            echo "install attempt $attempt failed; retrying in 10 s"; sleep 10
+            echo "install attempt $attempt failed after $((SECONDS-t0)) s; retrying in 10 s"; sleep 10
           done
           echo "install failed after 3 attempts"; exit 1
       - uses: actions/cache@v6
