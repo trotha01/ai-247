@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import dataclasses
+import os
 
 from newsbot import discovery, feeds, llm, research, topics
 from tests.fixtures import make_items
@@ -57,8 +58,8 @@ def test_seed_topics_file_is_valid_and_has_the_two_seed_lanes():
     c = cfg()
     ids = [t["id"] for t in c["topics"]]
     assert ids[:2] == ["agent-harnesses", "ai-vfx"] and all(t["lane"] == "seed" for t in c["topics"][:2])
-    assert c["repeat_after_episodes"] >= 1 and c["max_new_topics_per_day"] == 1
-    assert json.loads(open("episodes/history.json").read())["episodes"] == [] or True   # file parses
+    assert c["repeat_after_episodes"] >= 1 and "max_new_topics_per_day" not in c["settings"]   # no daily cap (2026-11-06)
+    assert not os.path.exists("episodes/history.json")   # history lives in D1, never in the repo
 
 
 def test_keyword_matching_is_word_bounded_and_own_sources_always_match():
@@ -134,13 +135,16 @@ def test_plan_call_orders_validates_and_gates_the_intro():
     assert p2["intro"] is None and p2["intro_rejected"] and p2["dropped_by_plan"] == 0
 
 
-def test_plan_call_uses_plan_model_and_sonnet_price(monkeypatch):
-    monkeypatch.setattr(topics, "PLAN_MODEL", "claude-sonnet-5-5")
+def test_plan_call_uses_fable_low_effort_and_its_price(monkeypatch):
     c = Scripted(lambda s, u: json.dumps({"order": [1], "intro": ""}), tin=1000, tout=100)
     m = llm.Meter()
     topics.plan_call(c, m, cfg()["topics"][0], agent_items(5))
-    assert c.calls[0]["model"] == "claude-sonnet-5-5"
-    assert round(m.usd, 6) == round((1000 * 2.0 + 100 * 10.0) / 1e6, 6)   # Sonnet 5.5 prices, not Haiku's
+    assert c.calls[0]["model"] == "claude-fable-5-1" and c.calls[0]["output_config"] == {"effort": "low"} and "thinking" not in c.calls[0]
+    assert round(m.usd, 6) == round((1000 * 10.0 + 100 * 50.0) / 1e6, 6)   # Fable 5.1 prices, not Haiku's
+    monkeypatch.setattr(topics, "PLAN_MODEL", "claude-sonnet-5-5")
+    c2, m2 = Scripted(lambda s, u: json.dumps({"order": [1], "intro": ""}), tin=1000, tout=100), llm.Meter()
+    topics.plan_call(c2, m2, cfg()["topics"][0], agent_items(5))
+    assert c2.calls[0]["model"] == "claude-sonnet-5-5" and round(m2.usd, 6) == round((1000 * 2.0 + 100 * 10.0) / 1e6, 6)
 
 
 # ---------- stage + history ----------
@@ -161,15 +165,24 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
             return json.dumps({"order": [2, 1, 3, 4, 5, 6], "intro": "This episode is about coding agents. Here is what the sources say."})
         assert system == discovery.DISCOVERY_SYS
         return json.dumps({"topic": {"id": "acme-widgets", "name": "Acme widgets", "description": "Widgets.", "keywords": ["widget", "acme", "widgets"],
-                                     "queries": ["acme widget"], "reason": "many widget items"}})
+                                     "queries": ["acme widget"], "links": ["https://acme.example/widgets"], "reason": "many widget items"}})
     m = llm.Meter()
-    tr = topics.research_stage(its, reports, NOW, Scripted(handler), m, tmp_path / "episode", log=lambda *a: None)
+    client = Scripted(handler)
+    tr = topics.research_stage(its, reports, NOW, client, m, tmp_path / "episode", log=lambda *a: None)
     info = json.loads((tmp_path / "episode/topic_pick.json").read_text())
-    assert info["mode"] == "topic" and info["topic"]["id"] == "agent-harnesses"
+    assert info["mode"] == "topic" and info["topic"]["id"] == "agent-harnesses" and info["history"]["backend"] == "file"   # HISTORY_PATH is monkeypatched: file store
     # one source only: the per-source cap (4) would leave fewer than min_items, so it is lifted and all 6 air
     assert [i.url for i in tr["ranked"][:2]] == [its[1].url, its[0].url] and len(tr["ranked"]) == 6
     assert tr["script_extra"]["rundown_title"].endswith("coding agents") and tr["script_extra"]["intro"].startswith("This episode")
-    assert info["discovery"]["accepted"] and info["discovery"]["entry"]["id"] == "acme-widgets" and "plan" in m.by_kind and m.calls == 2
+    assert info["discovery"] is None and m.calls == 1 and "plan" in m.by_kind   # discovery runs after the writer
+    assert client.calls[0]["model"] == "claude-fable-5-1" and client.calls[0]["output_config"] == {"effort": "low"}
+    # discovery stage: the Fable call carries the web_search tool; the proposal (2 widget items) is accepted
+    its_d = its + [item("S", "Acme widget launch", "widget widget", "https://w/1"), item("S", "Widget two", "another widget", "https://w/2")]
+    disc = topics.discover_stage(its_d, NOW, client, m, tmp_path / "episode", log=lambda *a: None)
+    info = json.loads((tmp_path / "episode/topic_pick.json").read_text())
+    assert disc["accepted"] and info["discovery"]["entry"]["id"] == "acme-widgets" and m.calls == 2 and "discover" in m.by_kind
+    assert client.calls[1]["tools"][0]["name"] == "web_search" and client.calls[1]["model"] == "claude-fable-5-1"
+    assert info["discovery"]["entry"]["seed_urls"] == []   # the link was never seen in a search result or an item -> dropped
     # record: the history gets the episode, topics.json gets the discovered lane entry (once per day)
     script = {"topic": info["topic"], "stories": [{"source": "OpenAI", "url": i.url, "headline": i.title,
                                                    "sentences": [{"text": "A sentence."}]} for i in tr["ranked"][:3]]}
@@ -185,7 +198,8 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     c2 = json.loads((tmp_path / "topics/topics.json").read_text())
     assert c2["topics"][-1]["lane"] == "discovered" and c2["topics"][-1]["added"] == "2027-01-15" and "settings" in c2 and "_rx" not in c2["topics"][0]
     assert "repeat_after_episodes" not in c2   # settings are written once, under "settings"
-    # same run recorded twice: one entry; a second proposal the same day is not added
+    assert r["history_backend"] == "file" and r["d1_written"] is False and (tmp_path / "history.json").exists()   # artifact snapshot
+    # same run recorded twice: one entry; the same topic id is not appended twice (there is no daily cap any more)
     topics.record(tmp_path, run_id="4242", now=NOW)
     assert len(json.loads((tmp_path / "episodes/history.json").read_text())["episodes"]) == 1 and len(json.loads((tmp_path / "topics/topics.json").read_text())["topics"]) == 3
     # next run: the covered URLs are excluded and the topic is blocked (aired 0 episodes ago, no new items)
@@ -217,8 +231,12 @@ def test_merge_history_unions_by_run_id():
     assert [e["run_id"] for e in topics.merge_history(a, b)["episodes"]] == ["1", "2", "3"]
 
 
-def test_meter_cost_by_kind_feeds_the_shared_budget():
+def test_meter_cost_by_kind_feeds_the_shared_budget_and_bills_web_searches():
     m = llm.Meter()
     m.add(SimpleNamespace(input_tokens=10_000, output_tokens=1000), kind="plan")
     m.add(SimpleNamespace(input_tokens=10_000, output_tokens=1000), kind="write")
     assert set(m.by_kind) == {"plan", "write"} and round(sum(m.by_kind.values()), 6) == round(m.usd, 6)
+    before = m.usd
+    m.add(SimpleNamespace(input_tokens=1000, output_tokens=100, server_tool_use=SimpleNamespace(web_search_requests=3)),
+          model="claude-fable-5-1", kind="discover")
+    assert m.searches == 3 and round(m.usd - before, 6) == round((1000 * 10 + 100 * 50) / 1e6 + 3 * 0.01, 6)

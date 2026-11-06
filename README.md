@@ -13,7 +13,7 @@ A code-made, 24/7 AI news channel. Bulletins and graphics are rendered by code f
 5. Replays and a pre-rendered bootstrap pool keep the channel from going dark.
 6. Every segment is labelled as AI-generated, and every claim cites its source.
 7. Each episode researches one topic (`topics/topics.json`, editable; `docs/TOPICS.md`) from primary sources and
-   never repeats a topic or story covered in `episodes/history.json` unless there is new news.
+   never repeats a topic or story already in the episode history (Cloudflare D1) unless there is new news.
 
 ## Plan
 

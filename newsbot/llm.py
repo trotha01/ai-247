@@ -11,11 +11,15 @@ import os
 from .script import build_script, check_story, story_from_item, select_items
 
 MODEL = os.environ.get("NEWSBOT_MODEL", "claude-haiku-5-5")
-MAX_RUN_USD = float(os.environ.get("NEWSBOT_MAX_RUN_USD", "0.05"))
+# Per-run cap. 0.75 covers the topic stage on Claude Fable 5.1 (plan + web-searching discovery, worst case ~0.45 USD)
+# plus the Haiku writer/checker (~0.01). The Haiku-only digest ran under 0.05; see docs/TOPICS.md "Cost".
+MAX_RUN_USD = float(os.environ.get("NEWSBOT_MAX_RUN_USD", "0.75"))
 # USD per million tokens (input, output), prompts <= 100k tokens. VERIFIED on 2026-11-06 against
 # https://platform.claude.com/docs/en/about-claude/pricing (Haiku 5.5 0.10/0.50, Sonnet 5.5 2/10).
-PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0)}
-_default = PRICES.get(MODEL, (2.0, 10.0))  # unknown model: assume the Sonnet-class price (conservative)
+# Fable 5.1 10/50 (skill table, cached 2026-10-06). Web search: 10 USD per 1,000 searches, billed per search.
+PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0), "claude-fable-5-1": (10.0, 50.0)}
+WEB_SEARCH_USD = 0.01
+_default = PRICES.get(MODEL, (10.0, 50.0))  # unknown model: assume the Fable-class price (conservative)
 PRICE_IN = float(os.environ.get("NEWSBOT_PRICE_IN", _default[0]))
 PRICE_OUT = float(os.environ.get("NEWSBOT_PRICE_OUT", _default[1]))
 
@@ -28,13 +32,13 @@ def prices_for(model: str | None) -> tuple[float, float]:
     """(input, output) USD per MTok. The run's default model uses the (env-overridable) PRICE_IN/OUT."""
     if not model or model == MODEL:
         return PRICE_IN, PRICE_OUT
-    return PRICES.get(model, (2.0, 10.0))
+    return PRICES.get(model, (10.0, 50.0))
 
 
 class Meter:
     """Per-run spend, shared by every call of the run (writer, checker, repair, topic plan, discovery)."""
     def __init__(self):
-        self.usd, self.calls, self.tokens_in, self.tokens_out = 0.0, 0, 0, 0
+        self.usd, self.calls, self.tokens_in, self.tokens_out, self.searches = 0.0, 0, 0, 0, 0
         self.by_kind: dict[str, float] = {}
 
     def cost(self, tin, tout, model=None):
@@ -52,6 +56,9 @@ class Meter:
         self.tokens_in += usage.input_tokens
         self.tokens_out += usage.output_tokens
         c = self.cost(usage.input_tokens, usage.output_tokens, model)
+        searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
+        c += searches * WEB_SEARCH_USD          # server-side web search tool, billed per search on top of tokens
+        self.searches += searches
         self.usd += c
         self.by_kind[kind] = round(self.by_kind.get(kind, 0.0) + c, 6)
         if self.usd > MAX_RUN_USD:

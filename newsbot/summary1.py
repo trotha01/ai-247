@@ -13,9 +13,14 @@ print(f"- Script by `{r['script_by']}`; TTS `{r['tts_engine']}`")
 tp = r.get("topic") or {}
 if tp.get("mode") == "topic":
     print(f"- Topic: **{tp.get('name')}** (`{tp.get('id')}`, lane {tp.get('lane')}); primary sources read: {tp.get('fetched_sources')}; "
-          f"plan model `{tp.get('plan_model')}`; discovery: {tp.get('discovery')}")
+          f"plan model `{tp.get('plan_model')}`")
 else:
     print(f"- Topic: none (general rundown, mode `{tp.get('mode')}`)")
+if tp.get("discovery_model"):
+    print(f"- Discovery (`{tp.get('discovery_model')}`, web search): {'**new topic accepted**' if tp.get('discovery_accepted') else 'no new topic'}; "
+          f"{tp.get('web_searches')} web searches; cost {tp.get('discovery_cost_usd')} USD; {tp.get('discovery')}")
+hs = tp.get("history") or {}
+print(f"- History store: `{hs.get('backend')}` {hs.get('note') or ''}" + (f" **NEEDS TREVOR: {hs['needs_you']}**" if hs.get("needs_you") else ""))
 print(f"- Aired sentences: {au['aired_sentences']}; supported by cited source: **{au['supported_pct']}%**; deterministic grounding: {au['grounded_pct']}%; unsourced items aired: **{au['unsourced_items']}**")
 if ll.get("used"):
     print(f"- Claude `{ll['model']}`: {ll['api_calls']} calls, {ll['tokens_in']} in / {ll['tokens_out']} out tokens, "

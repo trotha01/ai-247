@@ -115,6 +115,17 @@ def main(argv=None) -> int:
                 sc["stories"].remove(s)
         print("script by:", sc["generated_by"], "| llm:", json.dumps(stats))
 
+    with tm.stage("discovery"):
+        # Discovery lane after the writer (docs/TOPICS.md): one web-searching Fable call; a budget stop here costs
+        # nothing that airs. Applied to topics/topics.json by `newsbot.topics record` after the publish step.
+        disc = {"accepted": False, "reason": "topic mode off"}
+        if topics.enabled():
+            disc = topics.discover_stage(items, now, client, meter, ep)
+        stats.update({"cost_usd_estimate": round(meter.usd, 5), "api_calls": meter.calls, "tokens_in": meter.tokens_in,
+                      "tokens_out": meter.tokens_out, "cost_by_kind": dict(meter.by_kind), "web_searches": getattr(meter, "searches", 0)}
+                     if stats.get("used") else {})
+        print("discovery:", json.dumps({k: v for k, v in disc.items() if k != "entry"}))
+
     with tm.stage("tts_and_plan"):
         tts = Tts(force_engine=a.tts or None)
         tts.speed = 0.92  # slightly unhurried news pace; also fills the 10 minutes with speech instead of standby
@@ -155,9 +166,12 @@ def main(argv=None) -> int:
               "rundown_stories": len(chosen), "rundown_sources": sorted({s["source"] for s in chosen}),
               "feeds": reports, "replay_blocks": sum(1 for b in blocks if b["kind"] == "replay"),
               "topic": {"mode": tr["info"].get("mode"), **(tr["info"].get("topic") or {}),
-                        "fetched_sources": sum(1 for f in tr["info"].get("fetches", []) if f.get("ok")),
-                        "discovery": (tr["info"].get("discovery") or {}).get("reason"),
-                        "plan_model": (tr["info"].get("plan") or {}).get("model")}}
+                        "fetched_sources": sum(1 for f in tr["info"].get("fetches", []) if f.get("fetched")),
+                        "discovery": disc.get("reason"), "discovery_accepted": disc.get("accepted"),
+                        "discovery_model": disc.get("model"), "discovery_cost_usd": disc.get("cost_usd"),
+                        "web_searches": disc.get("searches"),
+                        "plan_model": (tr["info"].get("plan") or {}).get("model"),
+                        "history": tr["info"].get("history")}}
     (ep / "report.json").write_text(json.dumps(report, indent=1))
     shutil.copy(ep / "report.json", out / "report.json")
     print("REPORT", json.dumps({k: report[k] for k in ("stage_seconds", "total_seconds", "episode_seconds", "audit", "llm", "topic")}, indent=1))

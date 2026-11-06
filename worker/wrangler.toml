@@ -7,6 +7,15 @@ compatibility_date = "2025-01-01"
 binding = "BUCKET"
 bucket_name = "ai247-media"
 
+# Episode history for topic/story dedupe (docs/TOPICS.md "Persistence"): written by the day1 job through the
+# Cloudflare REST API, read here at /history.json. deploy.yml looks the database up by name (creating it if missing),
+# writes its id into this line before `wrangler deploy`, and applies migrations/. The id is not a secret.
+[[d1_databases]]
+binding = "DB"
+database_name = "ai247-history"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
 [vars]
 # R2 key prefix of manifest.json + segments ("" = bucket root). See docs/R2_LAYOUT.md. Override per deploy: --var PREFIX:bulletins/live/
 PREFIX = ""

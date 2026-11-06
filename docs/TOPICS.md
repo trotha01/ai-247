@@ -1,24 +1,31 @@
-# Topic research stage (design)
+# Topic research stage (design, approved by Trevor 2026-11-06 with four changes)
 
 Goal: each episode is Claude researching one topic in depth, not a digest of whatever the 8 feeds had. The
 stage sits in front of the existing writer: fetch feeds -> **pick a topic -> gather and read primary sources ->**
-Haiku writer + fact check (unchanged) -> episode -> R2.
+Haiku writer + fact check (unchanged) -> episode -> R2 -> **record in D1 -> discovery (web search)**.
+
+Trevor's changes to the first draft: (1) the discovery call searches the web, not just feed titles; (2) no cap on new
+topics per day; (3) history lives in Cloudflare D1, never in the repo; (4) plan and discovery run on Claude Fable 5.1
+at low effort, writer and checker stay on Claude Haiku 5.5.
 
 ## Files Trevor can edit
 
 - `topics/topics.json`: the topic list. Each topic has `id`, `name`, `lane` (`seed` or `discovered`), `keywords`
-  (matched against feed item title+summary, lower-cased tokens, any keyword phrase hit counts), optional
-  topic-specific `sources` (extra feeds or GitHub release repos, fetched only when that topic is a candidate),
-  `enabled`, `added` (date), `reason` (one line). Seed lanes: `agent-harnesses` (AI agent harnesses and coding
-  agents) and `ai-vfx` (AI for VFX and film/video production). Settings at the top: `repeat_after_episodes` (N),
-  `min_new_items_to_repeat`, `max_new_topics_per_day`.
-- `episodes/history.json`: one entry per published episode: run id, time, topic id, story URLs, headlines, and
-  the sha256 of every aired sentence. Written by the workflow (see "Persistence"); hand edits are fine.
+  (matched against feed item title+summary, lower-cased tokens, any keyword phrase hit counts), `queries` (web
+  lookups for arXiv / GitHub / Hacker News), optional topic-specific `sources` (extra feeds or GitHub release repos),
+  `seed_urls` (primary links a discovery call found; read and cited like any source), `enabled`, `added` (date),
+  `reason` (one line). Seed lanes: `agent-harnesses` (AI agent harnesses and coding agents) and `ai-vfx` (AI for VFX
+  and film/video production). Settings at the top: `repeat_after_episodes` (N), `min_new_items_to_repeat`,
+  `min_items`, `discovery_enabled`, `lane_weights`. Discovered topics are appended by the workflow (the only thing it
+  commits); delete or set `enabled: false` to drop one.
+- The episode history is **not** a repo file any more. It is the D1 database `ai247-history` (see "Persistence");
+  the Worker serves a read-only view at `/history.json?limit=50`, and every run's artifact carries a snapshot
+  (`out1/history.json`).
 
-## Per episode (`newsbot/topics.py`, stage `topic_research` in `newsbot/day1.py`)
+## Per episode (`newsbot/topics.py`, stages `topic_research` and `discovery` in `newsbot/day1.py`)
 
 1. **Candidates**: for every enabled topic, the feed items whose title+summary match its keywords, plus items from
-   its own sources. Items already covered (URL in history) are dropped.
+   its own sources. Items already covered (URL in the history) are dropped.
 2. **Score** = freshness x novelty x lane weight, deterministic, no LLM, written to `episode/topic_pick.json`:
    - freshness: sum over the topic's uncovered items of `0.5^(age_h/48)` (same decay as `rank.py`), capped at 8;
    - novelty: 1.0 if the topic has never aired or last aired N or more episodes ago; otherwise
@@ -30,53 +37,91 @@ Haiku writer + fact check (unchanged) -> episode -> R2.
    (`topic: null`, reported as `feeds` mode), so the channel never goes dark.
 3. **Research** (`newsbot/research.py`): the picked topic is deepened with keyless web lookups using its
    `queries` (arXiv API abstracts, GitHub repository search for recently pushed repos, Hacker News stories with
-   >= 20 points used only as leads to their primary URL); leads without text are read first (3 pages max). The
-   pool is ranked with `rank.py` (per-source cap 4, lifted when the topic lives on one or two sources), then the
-   top stories' primary pages (article, arXiv abstract, release page) are fetched politely (robots.txt, the newsbot
-   UA, 20 s timeout, 1 MB cap, 8 fetches per run in total), reduced to their main text, and used instead of the
-   short feed summary when they add at least 400 characters: up to 6,000 characters reach the writer and checker
-   (3,500 in feeds mode). Every sentence is still written from that one source and fact-checked against it;
-   nothing changes in the gate.
-4. **Plan call** (one call, default Claude Haiku 5.5; `NEWSBOT_PLAN_MODEL=claude-sonnet-5-5` switches it): given
-   the topic and the candidate titles, return the story order and a two-sentence spoken framing intro that must
-   contain no number or named entity not present in the sources (deterministic check; on failure the fixed
-   intro is used). It never writes claims.
-5. **Discovery lane** (`newsbot/discovery.py`, one Haiku call per run, skipped once the day's cap is reached):
-   given the run's item titles and the current topics, propose at most one new, novel or newly popular area of AI
-   (id, name, description, keywords, queries, one-line reason) or null. It enters `topics.json` (lane `discovered`)
-   only if its keywords match >= 2 of the run's items, no existing topic is similar (name/keyword token overlap),
-   the reply validates field by field, and no discovered topic was added today (`settings.max_new_topics_per_day`,
-   default 1; `settings.discovery_enabled` turns the lane off).
-6. **Dedupe**: covered URLs are excluded at step 1; the history entry is appended after the episode is published.
+   >= 20 points used only as leads to their primary URL) and its `seed_urls`; leads without text are read first
+   (3 pages max). The pool is ranked with `rank.py` (per-source cap 4, lifted when the topic lives on one or two
+   sources), then the top stories' primary pages (article, arXiv abstract, release page) are fetched politely
+   (robots.txt, the newsbot UA, 20 s timeout, 1 MB cap, 8 fetches per run in total), reduced to their main text, and
+   used instead of the short feed summary when they add at least 400 characters: up to 6,000 characters reach the
+   writer and checker (3,500 in feeds mode). Every sentence is still written from that one source and fact-checked
+   against it; nothing changes in the gate.
+4. **Plan call** (one call, **Claude Fable 5.1, `output_config.effort = low`**, no `thinking` parameter since Fable
+   always thinks; `NEWSBOT_PLAN_MODEL` / workflow input `plan_model` switch it): given the topic and the candidate
+   titles, return the story order and a two-sentence spoken framing intro that must contain no number or named
+   entity not present in the sources (deterministic check; on failure the fixed intro is used). It never writes
+   claims. `max_tokens` 3000 because Fable's thinking tokens count as output.
+5. **Writer + checker** (`newsbot/llm.py`): unchanged, Claude Haiku 5.5, fresh-context fact check, deterministic
+   number/name grounding, one repair round, extractive fallback. Nothing airs without a source card.
+6. **Discovery lane** (`newsbot/discovery.py`, after the writer so a budget stop never costs an aired sentence):
+   one **Claude Fable 5.1 call at low effort with the server-side web search tool** (`web_search_20260209`,
+   `max_uses` 3; falls back to `web_search_20250305` on a 400). It sees the run's item titles and the current topics,
+   searches the web for a new, novel or newly popular area of AI, and proposes `{id, name, description, keywords,
+   queries, links, reason}` or null. Gates, all deterministic:
+   - `links` must be http(s), not on an aggregator/social host (HN, Reddit, X, YouTube, Medium, news sites, ...), and
+     must have appeared in the search results the tool returned or among this run's items: the model cannot invent a
+     URL. Surviving links become the topic's `seed_urls`, so the first episode on it cites those primary pages.
+   - at least 2 "items" match its keywords, counting the run's feed items and the surviving primary links;
+   - no existing topic is similar (overlap coefficient of name+keyword tokens >= 0.5, plural-insensitive);
+   - fields validate (kebab id, 3-15 keywords, ...); a `refusal` stop or non-JSON reply adds nothing.
+   **There is no per-day cap** (`max_new_topics_per_day` was removed). `settings.discovery_enabled: false` turns the
+   lane off; `NEWSBOT_DISCOVERY_SEARCHES` sets the search budget per call.
+7. **Dedupe**: covered URLs are excluded at step 1; the episode (topic, story URLs, sentence hashes) is written to D1
+   after the publish step, and the discovered topic (if any) is committed to `topics.json`.
+
+## Persistence (Cloudflare D1)
+
+- Database `ai247-history` (D1), schema in `worker/migrations/0001_history.sql`: `episodes` (one row per run, the
+  full history entry as JSON plus topic/ts/mode/published/r2_prefix/cost/model columns), `stories` (run_id, url,
+  source, headline), `claims` (run_id, sha256-16 of every aired sentence). All statements are `IF NOT EXISTS`.
+- **Write/read path from Actions**: `newsbot/history_db.py` calls the Cloudflare REST API
+  (`/accounts/<id>/d1/database/<uuid>/query` with bound parameters) using `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`, looks the database up by name and creates it if missing, runs the migration file
+  idempotently, then `load()` / `upsert()`. No Node install in the day1 job; secrets and the account id are never
+  printed. `python -m newsbot.history_db status` is a read-only check.
+- **Worker**: `[[d1_databases]]` binding `DB` in `worker/wrangler.toml`; `deploy.yml` looks the database up by name
+  (creating it if needed), writes its id into the toml, runs `wrangler d1 migrations apply --remote`, then deploys.
+  `GET /history.json?limit=N` returns the newest entries (CORS, no-store).
+- **Permission**: the token needs **Account -> D1 -> Edit**. Without it the day1 job reads/writes only the R2 mirror
+  (`episodes/history.json` in the media bucket, kept as a read cache / fallback), prints a `::warning::` and the job
+  summary says `History store: r2 ... NEEDS TREVOR: Add Cloudflare API token permission Account -> D1 -> Edit`;
+  the deploy job removes the binding so the Worker still deploys. On the first run with D1 working, entries found in
+  the R2 mirror are imported, so nothing is lost across the switch.
+- Nothing about history is committed to the repo (`episodes/` is git-ignored). Only `topics/topics.json` is committed
+  back, and only when discovery added a topic.
 
 ## Cost and models
 
-Writer, checker and repair stay on Claude Haiku 5.5 under the existing `Meter` and `NEWSBOT_MAX_RUN_USD` = 0.05
-per run. The plan and discovery calls use the same meter. Longer source text (6,000 vs 3,500 chars) raises the
-writer+checker input: estimate 0.010-0.020 USD per episode on Haiku (today 0.005); Sonnet for the plan call adds
-about 0.01. With the 3-hourly cron (8 runs/day): about 0.10-0.20 USD/day, 3-6 USD/month, under the 10 USD cap.
-Measured cost per episode is in `report.json` (`llm.cost_usd_estimate`, split by call kind) and the job summary.
+| Call | Model | Effort | Per episode (estimate) |
+|---|---|---|---|
+| writer + checker + repair (about 30 calls) | Claude Haiku 5.5 (0.10 / 0.50 USD per MTok) | low / medium | 0.005-0.012 USD measured (0.00586 on run 42229528561 with 6,000-char sources) |
+| plan (1 call) | Claude Fable 5.1 (10 / 50 USD per MTok) | low | about 0.03-0.06 USD (1-3k in, 0.3-1k out incl. thinking) |
+| discovery (1 call + up to 3 web searches at 0.01 USD each) | Claude Fable 5.1 | low | about 0.10-0.25 USD (search results are input tokens) |
+
+Estimated **0.15-0.30 USD per episode**; the per-run guard `NEWSBOT_MAX_RUN_USD` is **0.75** (pre-flight worst case
+before every call; the writer runs before discovery, so a stop only drops discovery). With the 3-hourly cron that is
+**1.2-2.4 USD/day, 35-70 USD/month**, well above the earlier 10 USD monthly limit; levers in order of effect:
+`plan_model=claude-haiku-5-5` (workflow input / `NEWSBOT_PLAN_MODEL`, `NEWSBOT_DISCOVERY_MODEL`), a slower cron,
+`NEWSBOT_DISCOVERY_SEARCHES`, `settings.discovery_enabled: false`. Measured cost by call kind is in `report.json`
+(`llm.cost_by_kind`: write / check / repair / plan / discover, `llm.web_searches`) and in the job summary.
+
+**Measured on one real run**: see "Measured run" below (filled in from the first `workflow_dispatch` of this build).
+
+## Measured run
+
+_Pending: filled in after the first dispatched episode of this build._
 
 ## Outputs
 
-`episode/topic_pick.json` (scores of every topic, the pick, fetch reports, the plan and discovery results),
-`script.json` gains `topic`, `rundown_title` and the planned `intro`; `report.json` gains `topic` and
-`llm.cost_by_kind` (write / check / repair / plan / discover). The job summary shows the topic, sources read,
-plan model, discovery outcome and the cost split. Workflow inputs: `mode` (topic | feeds), `topic` (force an id),
-`plan_model`. Fixture runs (`--items-json`) fetch nothing. After a publish the workflow runs
-`site/test/e2e-live.js` (Playwright) against https://ai-247.pages.dev: playlist 200, media sequence rising, page in
-state live, video time advancing, segments as video/mp2t, and whether the new bulletin is already in the playlist
-(it airs at the next cycle boundary).
-
-## Persistence
-
-The workflow commits `episodes/history.json` and `topics/topics.json` back to the branch it ran on (`contents:
-write`, `git pull --rebase` first, bot commit, never force). A push by `GITHUB_TOKEN` triggers no other workflow.
-As a fallback the same history is uploaded to R2 as `episodes/history.json` with the episode and read back at the
-next run, so dedupe survives a failed push. `mode=feeds` (workflow input) or repo variable `DAY1_TOPIC_MODE=off`
-restores the old digest behaviour without a commit.
+`episode/topic_pick.json` (scores of every topic, the pick, fetch reports, the plan result, the history store status,
+the discovery result with its cost and search count), `script.json` gains `topic`, `rundown_title` and the planned
+`intro`; `report.json` gains `topic` (incl. `history`, `discovery_*`) and `llm.cost_by_kind`. The job summary shows
+the topic, sources read, plan model, the discovery outcome and cost, the history store (and what Trevor must fix if
+D1 is unavailable), and the cost split. Workflow inputs: `mode` (topic | feeds), `topic` (force an id), `plan_model`
+(Fable 5.1 default, Sonnet 5.5, Haiku 5.5). Fixture runs (`--items-json`) fetch nothing. After a publish the workflow
+runs `site/test/e2e-live.js` (Playwright) against https://ai-247.pages.dev: playlist 200, media sequence rising,
+page in state live, video time advancing, segments as video/mp2t, and whether the new bulletin is already in the
+playlist (it airs at the next cycle boundary).
 
 ## Not in scope
 
-Keyed web search APIs; the discovery call sees only the titles the feeds and topic sources carried this run.
-Page fetching respects robots.txt and reads at most 8 pages per run.
+Page fetching respects robots.txt and reads at most 8 pages per run. Server-side refusal fallbacks are not enabled
+on the Fable calls: a refusal simply means no plan intro / no new topic for that run (logged).

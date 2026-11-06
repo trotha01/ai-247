@@ -1,11 +1,12 @@
-"""Topic research stage (docs/TOPICS.md): pick a topic, read its primary sources, plan the episode, propose at
-most one new topic per day, and keep episodes/history.json for dedupe.
+"""Topic research stage (docs/TOPICS.md): pick a topic, read its primary sources, plan the episode, let the
+discovery lane propose a new topic (with web search), and keep the episode history in Cloudflare D1 for dedupe.
 
-    python -m newsbot.topics record out1     # after the publish step: append the episode to the history,
-                                             # apply an accepted discovery proposal, mirror the history to R2
+    python -m newsbot.topics record out1     # after the publish step: write the episode to D1 (R2 mirror as a
+                                             # read cache), apply an accepted discovery proposal to topics.json
 
-Scoring is deterministic (no LLM). The two LLM calls (plan, discovery) share the run's cost meter and never
-write claims: every aired sentence still comes from one source text and goes through the fact-check gate.
+Scoring is deterministic (no LLM). The two LLM calls (plan, discovery; Claude Fable 5.1 at low effort) share the
+run's cost meter and never write claims: every aired sentence still comes from one source text and goes through the
+fact-check gate (Claude Haiku 5.5). History is never committed to the repo: D1 is the store, R2 the fallback cache.
 """
 from __future__ import annotations
 
@@ -18,22 +19,25 @@ import sys
 import time
 from pathlib import Path
 
-from . import discovery, llm, r2, rank, research
+from . import discovery, history_db, llm, r2, rank, research
 from . import feeds as feedmod
 from . import script as sm
 
 TOPICS_PATH = Path(os.environ.get("NEWSBOT_TOPICS", "topics/topics.json"))
-HISTORY_PATH = Path(os.environ.get("NEWSBOT_HISTORY", "episodes/history.json"))
-HISTORY_KEY = "episodes/history.json"          # R2 mirror of the history (fallback when the git push fails)
+# Local history file: tests / offline fixture runs only (NEWSBOT_HISTORY). Production history lives in D1.
+HISTORY_PATH = Path(os.environ["NEWSBOT_HISTORY"]) if os.environ.get("NEWSBOT_HISTORY") else None
+HISTORY_KEY = "episodes/history.json"          # R2 mirror of the history: read cache / fallback when D1 is unavailable
+HISTORY_STATUS: dict = {"backend": "none", "note": "", "needs_you": None}
 MAX_FETCH = int(os.environ.get("NEWSBOT_MAX_FETCH", str(research.MAX_FETCH)))
 SOURCE_CHARS = int(os.environ.get("NEWSBOT_TOPIC_SOURCE_CHARS", str(research.MAX_CHARS)))
 MAX_LEADS = 3            # HN leads (no feed text) fetched before ranking so they can compete
 FRESH_CAP = 8.0
 MAX_HISTORY = 500
 MAX_STORIES = 12
-PLAN_MODEL = os.environ.get("NEWSBOT_PLAN_MODEL") or llm.MODEL
-PLAN_MAX_TOKENS = 1200
-DEFAULTS = {"repeat_after_episodes": 6, "min_new_items_to_repeat": 3, "max_new_topics_per_day": 1, "min_items": 5,
+PLAN_MODEL = os.environ.get("NEWSBOT_PLAN_MODEL") or "claude-fable-5-1"
+PLAN_EFFORT = os.environ.get("NEWSBOT_PLAN_EFFORT", "low")
+PLAN_MAX_TOKENS = 3000       # Fable thinks before the JSON; thinking tokens count as output
+DEFAULTS = {"repeat_after_episodes": 6, "min_new_items_to_repeat": 3, "min_items": 5,
             "discovery_enabled": True, "lane_weights": {"seed": 1.0, "discovered": 0.9}}
 
 
@@ -48,8 +52,10 @@ def load_topics(path: Path = TOPICS_PATH) -> dict:
     for k, v in DEFAULTS.items():          # settings live under "settings" (discovery.py reads them there) and are
         cfg["settings"].setdefault(k, v)   # mirrored to the top level for the scoring code
         cfg[k] = cfg["settings"][k]
+    cfg["settings"].pop("max_new_topics_per_day", None)   # removed 2026-11-06: no cap on new areas per day
     for t in cfg["topics"]:
         t.setdefault("enabled", True), t.setdefault("lane", "seed"), t.setdefault("sources", []), t.setdefault("keywords", [])
+        t.setdefault("seed_urls", [])
     return cfg
 
 
@@ -59,24 +65,61 @@ def save_topics(cfg: dict, path: Path = TOPICS_PATH) -> None:
     Path(path).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
 
 
-def load_history(path: Path = HISTORY_PATH, merge_r2: bool = False) -> dict:
-    h = json.loads(Path(path).read_text()) if Path(path).exists() else {"version": 1, "episodes": []}
-    h.setdefault("episodes", [])
+def _d1():
+    """A ready D1 handle (schema ensured), or None with HISTORY_STATUS explaining why."""
+    if not history_db.configured():
+        HISTORY_STATUS.update(note="D1 not configured (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID unset)")
+        return None
+    try:
+        db = history_db.D1()
+        db.ensure_schema()
+        return db
+    except history_db.D1Unavailable as e:
+        HISTORY_STATUS.update(note=f"D1 unavailable: {e}", needs_you=e.needs_you)
+        print(f"history: {HISTORY_STATUS['note']}")
+        return None
+
+
+def load_history(path: Path | None = None, merge_r2: bool = False) -> dict:
+    """D1 first (production), then the R2 mirror merged in, then the local file (tests/fixtures). Never raises."""
+    path = HISTORY_PATH if path is None else path
+    h = {"version": 1, "episodes": []}
+    HISTORY_STATUS.update(backend="none", note="", needs_you=None)
+    if path:                                   # tests / fixture runs: a local file is the store
+        HISTORY_STATUS["backend"] = "file"
+        if Path(path).exists():
+            h = json.loads(Path(path).read_text())
+            h.setdefault("episodes", [])
+    db = _d1() if not path else None
+    if db is not None:
+        try:
+            h = merge_history(h, db.load())
+            HISTORY_STATUS["backend"] = "d1"
+            print(f"history: D1 {db.name}: {len(h['episodes'])} episodes")
+        except history_db.D1Unavailable as e:
+            HISTORY_STATUS.update(note=f"D1 read failed: {e}", needs_you=e.needs_you)
+            print(f"history: {HISTORY_STATUS['note']}")
     if merge_r2 and r2.r2_configured():
         try:
             other = history_from_r2()
             if other:
                 h = merge_history(h, other)
+                if HISTORY_STATUS["backend"] in ("none",):
+                    HISTORY_STATUS["backend"] = "r2"
                 print(f"history: merged R2 mirror ({len(other.get('episodes', []))} entries) -> {len(h['episodes'])}")
         except Exception as e:  # never print the request (could carry the endpoint); type only
             print(f"history: R2 mirror unavailable ({type(e).__name__})")
+    h.pop("backend", None)
     return h
 
 
-def save_history(h: dict, path: Path = HISTORY_PATH) -> None:
+def save_history(h: dict, path: Path | None = None) -> None:
+    """Snapshot to a local file (tests, or out1/history.json for the run artifact). Not the store."""
     h["episodes"] = sorted(h["episodes"], key=lambda e: e.get("ts", ""))[-MAX_HISTORY:]
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(json.dumps(h, indent=1, ensure_ascii=False) + "\n")
+    path = HISTORY_PATH if path is None else path
+    if path:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps(h, indent=1, ensure_ascii=False) + "\n")
 
 
 def merge_history(a: dict, b: dict) -> dict:
@@ -210,11 +253,20 @@ def deepen(topic: dict, titems, covered: set[str], now: float, log=print) -> tup
     leads without text are read first (they have no feed summary), the rest of the fetch budget goes to the
     top-ranked stories' primary pages. Returns (ranked items, report)."""
     web, web_rep = research.web_candidates(topic, token=os.environ.get("GITHUB_TOKEN", ""), log=log, now=now)
+    # primary links the discovery call found for a discovered topic: leads too (read, then cited like any source)
+    seeds = [feedmod.Item(_host(u), topic["name"], "", u, time.strftime("%Y-%m-%d", time.gmtime(now)), now)
+             for u in topic.get("seed_urls", []) if isinstance(u, str) and u.startswith("http")]
+    web = seeds + web
     web = [i for i in web if i.url not in covered and i.url not in {t.url for t in titems}]
     leads = [i for i in web if not (i.summary or "").strip()][:MAX_LEADS]
     leads, lead_rep = research.enrich(leads, max_fetch=MAX_LEADS, max_chars=SOURCE_CHARS, log=log)
     pool = titems + [i for i in web if (i.summary or "").strip()] + [i for i in leads if (i.summary or "").strip()]
     return pool, {"web": web_rep, "leads": lead_rep}
+
+
+def _host(u: str) -> str:
+    from urllib.parse import urlsplit
+    return urlsplit(u).netloc.lower().removeprefix("www.") or "web"
 
 
 def merge_items(base, extra):
@@ -239,7 +291,7 @@ def plan_call(client, meter, topic: dict, items, max_stories: int = MAX_STORIES)
     """One call: story order + a spoken framing intro. Everything is validated deterministically."""
     listing = "\n".join(f"{k + 1}. [{i.source}] {i.title} -- {i.summary[:160]}" for k, i in enumerate(items))
     user = f"TOPIC: {topic['name']}\n\nCANDIDATES:\n{listing}"
-    reply = llm._json(llm._call(client, meter, PLAN_SYS, user, PLAN_MAX_TOKENS, effort="low", model=PLAN_MODEL, kind="plan"))
+    reply = llm._json(llm._call(client, meter, PLAN_SYS, user, PLAN_MAX_TOKENS, effort=PLAN_EFFORT, model=PLAN_MODEL, kind="plan"))
     order, seen = [], set()
     for v in reply.get("order", []):
         if isinstance(v, int) and 1 <= v <= len(items) and v not in seen:
@@ -265,6 +317,7 @@ def research_stage(items, reports, now, client, meter, ep: Path, log=print) -> d
     cfg = load_topics()
     h = load_history(merge_r2=True)
     info["history_entries"] = len(h["episodes"])
+    info["history"] = dict(HISTORY_STATUS)
     offline = bool(os.environ.get("NEWSBOT_OFFLINE"))   # fixture run: no topic feeds, no page fetches
     extra, extra_reports = ([], []) if offline else fetch_topic_sources(cfg)
     reports += extra_reports
@@ -303,14 +356,32 @@ def research_stage(items, reports, now, client, meter, ep: Path, log=print) -> d
         extra_script = {"topic": info["topic"], "rundown_title": f"In this episode: {topic['name']}"}
         if intro:
             extra_script["intro"] = intro + " This episode is A I generated. Every sentence shows the source it came from."
-    if client is not None:
-        try:   # discovery lane (newsbot/discovery.py): one call, deterministic gate; applied by `record`
-            entry = discovery.propose(client, meter, items, cfg, today, log=log)
-            info["discovery"] = {"accepted": bool(entry), "entry": entry}
-        except llm.BudgetExceeded as e:
-            log(f"discovery: budget stop: {e}")
     (ep / "topic_pick.json").write_text(json.dumps(info, indent=1, ensure_ascii=False))
     return {"info": info, "items": items, "ranked": ranked, "counts": counts, "script_extra": extra_script, "covered": covered_urls(h)}
+
+
+def discover_stage(items, now, client, meter, ep: Path, log=print) -> dict:
+    """Discovery lane (newsbot/discovery.py): one web-searching call, deterministic gate; applied by `record`.
+    Runs AFTER the script is written, so a budget stop here never costs the writer its calls. Updates topic_pick.json."""
+    today = time.strftime("%Y-%m-%d", time.gmtime(now))
+    result = {"accepted": False, "entry": None, "model": discovery.DISCOVERY_MODEL, "searches": 0, "cost_usd": 0.0, "reason": "not run"}
+    if client is None:
+        result["reason"] = "no LLM client"
+    else:
+        cfg = load_topics()
+        before_usd, before_s = meter.usd, getattr(meter, "searches", 0)
+        try:
+            entry = discovery.propose(client, meter, items, cfg, today, log=log)
+            result.update(accepted=bool(entry), entry=entry, reason=(entry or {}).get("reason") or "no new topic")
+        except llm.BudgetExceeded as e:
+            result["reason"] = f"budget stop: {e}"
+            log(f"discovery: budget stop: {e}")
+        result.update(searches=getattr(meter, "searches", 0) - before_s, cost_usd=round(meter.usd - before_usd, 5))
+    pick_path = ep / "topic_pick.json"
+    info = json.loads(pick_path.read_text()) if pick_path.exists() else {}
+    info["discovery"] = result
+    pick_path.write_text(json.dumps(info, indent=1, ensure_ascii=False))
+    return result
 
 
 # ---------------------------------------------------------------- history
@@ -340,15 +411,29 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
     if entry_prefix:
         entry["r2_prefix"] = entry_prefix
     h["episodes"] = [e for e in h["episodes"] if str(e.get("run_id")) != str(run_id)] + [entry]
-    save_history(h)
+    save_history(h)                                   # local file only when NEWSBOT_HISTORY is set (tests)
+    save_history(h, out / "history.json")             # snapshot in the run artifact (never committed)
     result = {"run_id": str(run_id), "topic": entry["topic"], "stories": len(entry["stories"]), "published": published,
-              "history_entries": len(h["episodes"]), "topic_added": None, "r2_mirror": False}
+              "history_entries": len(h["episodes"]), "topic_added": None, "r2_mirror": False,
+              "history_backend": HISTORY_STATUS["backend"], "d1_written": False, "needs_you": HISTORY_STATUS.get("needs_you")}
+    db = _d1() if not HISTORY_PATH else None
+    if db is not None:
+        try:
+            have = db.run_ids()
+            for e in h["episodes"]:                   # seeds D1 from the R2 mirror / older entries on first use
+                if str(e.get("run_id")) not in have or str(e.get("run_id")) == str(run_id):
+                    db.upsert(e)
+            result.update(d1_written=True, history_backend="d1", d1_database_id=db.database_id())
+            print(f"history: wrote run {run_id} to D1 {db.name} ({len(h['episodes'])} episodes total)")
+        except history_db.D1Unavailable as e:
+            result.update(needs_you=e.needs_you, history_backend=HISTORY_STATUS["backend"])
+            print(f"history: D1 write failed: {e}")
     d = pick_info.get("discovery") or {}
     entry_t = d.get("entry") if d.get("accepted") else None
-    if entry_t:   # gated at run time against this run's items (discovery.validate); re-check the per-day cap here
+    if entry_t:   # gated at run time against this run's items and web results (discovery.validate); no daily cap
         cfg = load_topics()
         today = ts[:10]
-        if discovery.added_today(cfg, today) < cfg["max_new_topics_per_day"] and not any(t["id"] == entry_t["id"] for t in cfg["topics"]):
+        if not any(t["id"] == entry_t["id"] for t in cfg["topics"]):
             cfg["topics"].append({**entry_t, "added": today})
             save_topics(cfg)
             result["topic_added"] = entry_t["id"]
@@ -358,6 +443,8 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
             result["r2_mirror"] = True
         except Exception as e:
             print(f"history: R2 mirror write failed ({type(e).__name__})")
+    if result["needs_you"]:
+        print(f"::warning::history store needs Trevor: {result['needs_you']}")
     print("recorded:", json.dumps(result))
     return result
 

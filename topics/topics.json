@@ -4,7 +4,6 @@
   "settings": {
     "repeat_after_episodes": 6,
     "min_new_items_to_repeat": 3,
-    "max_new_topics_per_day": 1,
     "min_items": 5,
     "lane_weights": {
       "seed": 1.0,

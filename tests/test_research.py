@@ -135,52 +135,79 @@ def test_web_candidates_uses_topic_queries_dedupes_and_reports_failures():
     assert {i.source for i in items} == {"arXiv search", "GitHub search"}
 
 
-# ---------------------------------------------------------------- discovery lane
+# ---------------------------------------------------------------- discovery lane (web search, Fable, no daily cap)
 class Scripted:
-    def __init__(self, reply):
-        self.reply, self.calls, self.messages = reply, [], self
+    """Fake client: `reply` is the text block; `results` become a web_search_tool_result block (list of results)."""
+    def __init__(self, reply, results=None, searches=0, stop="end_turn", fail_first=None):
+        self.reply, self.results, self.searches, self.stop, self.fail_first = reply, results or [], searches, stop, fail_first
+        self.calls, self.messages = [], self
 
     def create(self, **kw):
         self.calls.append(kw)
-        return SimpleNamespace(content=[SimpleNamespace(type="text", text=self.reply)],
-                               usage=SimpleNamespace(input_tokens=900, output_tokens=150))
+        if self.fail_first and len(self.calls) == 1:
+            raise self.fail_first
+        content = []
+        if self.results:
+            content.append(SimpleNamespace(type="web_search_tool_result", content=[SimpleNamespace(type="web_search_result", url=u, title=t) for u, t in self.results]))
+        content.append(SimpleNamespace(type="text", text=self.reply))
+        return SimpleNamespace(content=content, stop_reason=self.stop,
+                               usage=SimpleNamespace(input_tokens=900, output_tokens=150, server_tool_use=SimpleNamespace(web_search_requests=self.searches)))
 
 
-TOPICS = {"settings": {"max_new_topics_per_day": 1},
+class BadRequestError(Exception):
+    pass
+
+
+TOPICS = {"settings": {},
           "topics": [{"id": "agent-harnesses", "name": "AI agent harnesses and coding agents", "lane": "seed",
                       "keywords": ["agent", "coding agent", "harness", "mcp"], "added": "2026-11-01"}]}
 ITEMS = [feeds.Item("S", "World models for robots: a new wave of simulators", "robot world model training", "https://a/1", "2026-11-06", 1.0),
          feeds.Item("S", "Open world-model release lets robots plan in simulation", "", "https://a/2", "2026-11-06", 1.0),
          feeds.Item("S", "Widget 2 coding agent harness", "", "https://a/3", "2026-11-06", 1.0)]
+LINKS = ["https://arxiv.org/abs/2611.02222", "https://github.com/acme/world-sim", "https://news.ycombinator.com/item?id=5", "https://made.up/x"]
+RESULTS = [("https://arxiv.org/abs/2611.02222", "Learned world models for robot planning"), ("https://github.com/acme/world-sim", "acme/world-sim: robot simulator")]
 PROPOSAL = {"topic": {"id": "robot-world-models", "name": "World models for robotics", "description": "Simulators learned from video that robots plan in.",
                       "keywords": ["world model", "world-model", "robots", "simulation", "simulator", "robot"],
-                      "queries": ["robot world model"], "reason": "Two items today are about learned simulators for robots."}}
+                      "queries": ["robot world model"], "links": LINKS, "reason": "Two items today are about learned simulators for robots."}}
 
 
-def test_discovery_adds_validated_topic_with_reason_and_counts_cost():
-    c, meter = Scripted(json.dumps(PROPOSAL)), llm.Meter()
+def test_discovery_uses_fable_with_web_search_and_keeps_only_seen_primary_links():
+    c, meter = Scripted(json.dumps(PROPOSAL), RESULTS, searches=2), llm.Meter()
     e = discovery.propose(c, meter, ITEMS, TOPICS, "2026-11-06", log=lambda *a: None)
     assert e and e["id"] == "robot-world-models" and e["lane"] == "discovered" and e["added"] == "2026-11-06"
-    assert "2 matching items" in e["reason"] and e["enabled"] is True and e["sources"] == []
-    assert meter.calls == 1 and meter.usd > 0
-    assert c.calls[0]["system"] == discovery.DISCOVERY_SYS and "CURRENT TOPICS" in c.calls[0]["messages"][0]["content"]
+    assert e["seed_urls"] == ["https://arxiv.org/abs/2611.02222", "https://github.com/acme/world-sim"]   # HN thread + unseen URL dropped
+    assert "4 matching items/links" in e["reason"]   # 2 feed items + 2 primary links
+    kw = c.calls[0]
+    assert kw["model"] == "claude-fable-5-1" and kw["output_config"] == {"effort": "low"} and "thinking" not in kw
+    assert kw["tools"] == [{"type": "web_search_20260209", "name": "web_search", "max_uses": discovery.MAX_SEARCHES}]
+    assert meter.calls == 1 and meter.searches == 2 and round(meter.usd, 6) == round((900 * 10 + 150 * 50) / 1e6 + 0.02, 6)
+    assert kw["system"] == discovery.DISCOVERY_SYS and "CURRENT TOPICS" in kw["messages"][0]["content"]
 
 
-def test_discovery_refuses_similar_unmatched_or_malformed_and_daily_cap():
-    today = "2026-11-06"
-    assert discovery.validate(None, ITEMS, TOPICS, today) == (None, "no proposal")
-    dup = {**PROPOSAL["topic"], "id": "agent-harness-tools", "name": "Agent harness tooling", "keywords": ["agent", "harness", "mcp", "tools"]}
-    assert discovery.validate(dup, ITEMS, TOPICS, today)[1].startswith("similar to existing topic")
-    ghost = {**PROPOSAL["topic"], "id": "quantum-llms", "name": "Quantum LLMs", "keywords": ["quantum", "qubit", "annealing"]}
-    assert discovery.validate(ghost, ITEMS, TOPICS, today)[1] == "only 0 of this run's items match"
-    bad = {**PROPOSAL["topic"], "id": "Not A Slug!"}
-    assert discovery.validate(bad, ITEMS, TOPICS, today) == (None, "bad id or name")
-    capped = {**TOPICS, "topics": TOPICS["topics"] + [{"id": "x", "name": "X", "lane": "discovered", "added": today, "keywords": ["zz"]}]}
-    assert discovery.validate(PROPOSAL["topic"], ITEMS, capped, today) == (None, "daily cap reached")
-    c = Scripted(json.dumps(PROPOSAL))
-    assert discovery.propose(c, llm.Meter(), ITEMS, capped, today, log=lambda *a: None) is None and c.calls == []  # no call made
-
-
-def test_discovery_null_or_garbage_reply_adds_nothing():
+def test_discovery_falls_back_to_basic_search_tool_on_400_and_handles_refusal_and_garbage():
+    c = Scripted(json.dumps(PROPOSAL), RESULTS, fail_first=BadRequestError("tools.0: web_search_20260209 is not supported"))
+    e = discovery.propose(c, llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None)
+    assert e and len(c.calls) == 2 and c.calls[1]["tools"][0]["type"] == "web_search_20250305"
+    assert discovery.propose(Scripted("", stop="refusal"), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
     assert discovery.propose(Scripted('{"topic": null}'), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
     assert discovery.propose(Scripted("not json at all"), llm.Meter(), ITEMS, TOPICS, "2026-11-06", log=lambda *a: None) is None
+
+
+def test_discovery_gates_similar_unmatched_malformed_and_has_no_daily_cap():
+    today, found = "2026-11-06", dict(RESULTS)
+    assert discovery.validate(None, ITEMS, TOPICS, today, found) == (None, "no proposal")
+    dup = {**PROPOSAL["topic"], "id": "agent-harness-tools", "name": "Agent harness tooling", "keywords": ["agent", "harness", "mcp", "tools"]}
+    assert discovery.validate(dup, ITEMS, TOPICS, today, found)[1].startswith("similar to existing topic")
+    ghost = {**PROPOSAL["topic"], "id": "quantum-llms", "name": "Quantum LLMs", "keywords": ["quantum", "qubit", "annealing"], "links": []}
+    assert discovery.validate(ghost, ITEMS, TOPICS, today, found)[1].startswith("only 0 matching")
+    bad = {**PROPOSAL["topic"], "id": "Not A Slug!"}
+    assert discovery.validate(bad, ITEMS, TOPICS, today, found) == (None, "bad id or name")
+    # web-only evidence: no feed item matches, but two seen primary links do -> accepted
+    webonly = {**PROPOSAL["topic"], "id": "robot-sim-x", "name": "Robot sim x", "keywords": ["world-sim", "robot planning", "simulator"]}
+    e, why = discovery.validate(webonly, [], TOPICS, today, found)
+    assert e and why == "ok" and len(e["seed_urls"]) == 2
+    # two discovered topics already added today: still accepted (no per-day cap)
+    many = {**TOPICS, "topics": TOPICS["topics"] + [{"id": f"x{i}", "name": f"X{i}", "lane": "discovered", "added": today, "keywords": ["zz"]} for i in range(2)]}
+    assert discovery.added_today(many, today) == 2
+    assert discovery.validate(PROPOSAL["topic"], ITEMS, many, today, found)[1] == "ok"
+    assert not discovery.primary_link("https://www.reddit.com/r/x") and discovery.primary_link("https://openai.com/index/x")
