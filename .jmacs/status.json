@@ -1,1 +1,1 @@
-{"state":"running","msg":"Both day1 runs published to R2 (42212912268 llm=off: 108 objects 34.1 MB; 42214045472 llm=on: 108 objects 33.5 MB, chained onto run 1 at cycle_start_k 161231). Docs PR with the PLAN.md note opening; done after it merges"}
+{"state":"running","msg":"Diagnosed: cron is on main and active, one slot (12:23Z) missed with no repo-side blocker; fixed the silent replay-fetch 404 (--workflow day1.yml) and documented schedule/budget behaviour in day1.yml. PR next, then waiting for the 15:23Z scheduled run."}
