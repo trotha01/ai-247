@@ -1,1 +1,1 @@
-{"state": "running", "msg": "PR #24 open (cloud/ai247-pool -> main): daily guarded refresh + MAX_MANIFEST_AGE_S 14400; pool already seeded by run 42222599138; waiting for ci, then merge, deploy, /healthz check"}
+{"state":"running","msg":"PR #26 open (pr-review workflow, ruleset JSON, CONTRIBUTING); waiting for ci, then merge, apply ruleset, proof PR"}
