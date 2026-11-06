@@ -1,1 +1,1 @@
-{"state":"running","msg":"ok"}
+{"state":"running","msg":"Day 1 code done, PR #3 open (units+seam 50 pass locally, 600.0 s local render, A/V drift 21 ms). Waiting on CI, then merge, then Actions runs (extractive + Haiku; key secret confirmed present)."}
