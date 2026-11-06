@@ -45,6 +45,9 @@ AI-247: make the GitHub Actions episode cron (`day1-episode`, `23 */3 * * *`) fi
   - https://ai-247.pages.dev/ (plain URL, headless Chromium from this session): state `live`, `currentTime` 24.2 -> 36.2 s over 12 s, readyState 4, not paused, no offline overlay, 0 page/console errors, fetching `seg/bulletins/20261106T144236Z/seg_003.ts`, `seg_004.ts` (200). Before the swap the same check played the 115430Z replay, as expected.
   - Trigger line in the log: `event=workflow_dispatch ref=main`. (`DAY1_CRON_ENABLED` is printed from PR #30 onwards, merged f0921b3 at 14:52Z, before the 15:23Z slot.)
 
+## Coordination
+- A separate worker (ai247-coverage, branch `cloud/ai247-coverage`) is moving the cadence toward hourly with >= 60 min of footage per run. This task does NOT touch the cron line, cadence or render length: its scope is proving that the `schedule` trigger fires (first slot 15:23Z) and, if it misses, fixing the trigger itself (workflow enabled state, job `if:` gate, default-branch recency). Both tasks edit `.github/workflows/day1.yml`; whoever merges second rebases. Trigger facts the coverage worker can rely on: the job-level gate is `vars.DAY1_CRON_ENABLED != 'false'` (unset = runs); the Trigger step prints `event=` and `DAY1_CRON_ENABLED=`; the replay fetch uses `--workflow day1.yml`.
+
 ## Pending
 - Wait for the 15:23Z scheduled run; verify success, Publish step keys, root manifest in R2 via `/healthz` (`manifest.uploaded` after 15:23Z, blocks 3 with the new bulletin first).
 - Todo triage: jmacs unavailable here; verdicts in the final handoff for the orchestrator to apply.
