@@ -8,7 +8,7 @@ AI-247 Day 2: Cloudflare Worker in worker/ serving a clock-computed rolling fake
 - docs/DAY2.md (behaviour, limitations, deploy checklist for Trevor).
 
 ## Pending
-- Open PR from cloud/ai247-d2, wait for checks, merge to main.
+- Nothing; PR #7 merged.
 
 ## Next step
-Push, PR, merge; set status done.
+Trevor: follow the deploy checklist in docs/DAY2.md.

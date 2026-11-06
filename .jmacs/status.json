@@ -1,1 +1,1 @@
-{"state":"running","msg":"Day 2 worker + tests done locally (48 pass); committing, opening PR"}
+{"state":"done","msg":"Day 2 Worker merged to main via PR #7 (48 local tests, CI green). Not deployed; deploy checklist in docs/DAY2.md."}
