@@ -1,19 +1,19 @@
-# Handoff
+# Handoff: AI-247 go live on ai-247.pages.dev
 
 ## Objective
-AI-247 replay-pool failover (no alerts, no cron, no external services): a bootstrap that publishes `pool/manifest.json` (loop of the Day 0 bulletin or the latest good episode already in R2), Worker fallback to that pool when `manifest.json` is missing / empty / stale beyond `MAX_MANIFEST_AGE_S` / references missing segments, `/healthz` JSON saying which source is live and the manifest age, tests (hls-parser + wrangler dev/Miniflare) that the playlist stays valid across the switch and the return.
+Make https://ai-247.pages.dev play the 24/7 channel: verify R2 has a manifest, verify the Worker playlist (CORS, media sequence), test the player with ?src=, set streamUrl in site/config.json via PR, merge, let deploy.yml push the site, re-test the plain URL.
 
 ## Done
-- Search: docs/PLAN.md, DAY2.md, MANIFEST-SWAP.md, DAY3.md, worker/ (index.js, playlist.js, tests), site/, workflows, newsbot/playlist.py, r2.py, pool.py, manifest.py; PR #11 (e2e/key layout, open) and PR #12 (merged). Reused: playlist.js `eras`/`tagsBeforeEras`/`layout`/`tagsBefore` (manifest-swap primitives), hls-parser, vitest, wrangler dev --local (Miniflare R2), pool.py block shape, r2.py credential convention, actions/checkout+setup-python+upload-artifact. Built: the composed-view state machine (nothing in the ecosystem does "fallback at the first unlisted segment, in-phase return, monotonic discontinuity sequence").
-- Worker: `worker/src/failover.js` (pure), `worker/src/channel.js` (R2 loads, checks, caching, /healthz), `index.js` delegates; `wrangler.toml` vars POOL_KEY, MAX_MANIFEST_AGE_S (0 = off), CHECK_SEGMENTS, FAILOVER_MIN_S. Tests: `worker/test/unit/failover.test.js` (16, simulated hours, hls-parser on every reload) and `worker/test/dev/failover-dev.test.js` (7, real Worker under wrangler dev --local, R2 objects deleted/re-put). All 71 unit + 7 dev tests pass locally.
-- Bootstrap: `newsbot/replay_pool.py` (`--from-r2` newest complete episode, `--from-dir` local render, manifest written last), `tests/test_replay_pool.py` (8, fake S3), dispatch-only `.github/workflows/replay-pool.yml`, `tests/test_replay_pool.py` added to ci.yml.
-- Docs: `docs/FAILOVER.md`; two lines in `docs/DAY2.md`.
+- Read docs/PLAN.md, DAY2.md, DEPLOY.md, R2_LAYOUT.md, worker/wrangler.toml, worker/src, site/, ci.yml, day1.yml, deploy.yml, scripts/smoke.sh.
+- Prerequisites landed: PR #18 (Day 1 publish to R2) merged 11:47Z; day1-episode run 42212912268 green at 11:56Z. Its Publish step log: 108 objects, 105 segments (100 bulletin + 5 slate) under bulletins/20261106T115430Z/, root manifest.json written last (6,910 bytes), epoch 1793000000, cycle_start_k 161021.
+- Worker https://ai247-live.trotha01.workers.dev: scripts/smoke.sh SMOKE OK (healthz 200; /live.m3u8 200, #EXTM3U, Access-Control-Allow-Origin *, EXT-X-MEDIA-SEQUENCE 161039 -> 161040; first segment 200 video/mp2t 451,764 bytes). No redeploy needed.
+- Player via ?src= on Pages (headless Chromium with H.264/AAC): state live, currentTime 12.06 -> 20.02 in 8 s, no OFFLINE overlay, playlist + segments with CORS, no JS errors, no failed requests.
+- PR #19 (site/config.json streamUrl = https://ai247-live.trotha01.workers.dev/live.m3u8) merged after ci (tests + worker-site-e2e green). deploy run 42214640757: deploy-site success (Pages token permission now works).
+- Plain https://ai-247.pages.dev/: config.json served the new streamUrl within ~10 s; headless check: state live, currentTime 12.05 -> 20.04, no overlay, no errors. Screenshots kept in the session scratchpad only (no workflow artifact; no new workflow was added).
+- Session network: personal cloud environment "ai-247" (hosts ai247-live.trotha01.workers.dev, ai-247.pages.dev, cdn.jsdelivr.net), approved during the session.
 
 ## Pending
-- PR #20 open; merge when CI (`tests`, `worker-site-e2e`) is green. main already merged in (PR #11, deploy workflow, Day 1 publisher): `scripts/smoke.sh` and `docs/DEPLOY.md` updated for the JSON `/healthz`; `replay_pool.py` reuses `r2.client()/bucket()`.
-- Merging changes `worker/**`, so the `deploy` workflow (added on main by PR #15/#17) deploys the Worker if the Cloudflare secrets exist. I did not and will not run a deploy myself.
-- Trevor, after deploy: run the `replay-pool` workflow once (source=r2 or artifact) so `pool/manifest.json` exists; set `MAX_MANIFEST_AGE_S` only if a dead pipeline should switch to the pool.
-- Note for the swap owner: `tagsBeforeEras` returns 0 for `first < oldest era start`; if the uploader publishes twice within ~N+10 segments the dropped `prev.prev` makes DISCONTINUITY-SEQUENCE dip to 0 for a few reloads. Not changed here.
+- Nothing for this item. Manual items for Trevor: custom domain/route for the Worker and the Pages site (docs/DEPLOY.md); the fixed EPOCH (1793000000) in worker/wrangler.toml and in the published manifest must never change; DAY1_CRON_ENABLED is unset so the 3-hourly cron (23 */3 * * *) is on; a failed day1 run leaves the previous manifest live, so the channel keeps looping the last episode + slate.
 
 ## Next step
-Wait for CI on PR #20, merge, set status done.
+None. Next manifest refresh: the day1-episode cron at 14:23Z (every 3 hours), which appends a new bulletin and keeps the previous one as a replay.
