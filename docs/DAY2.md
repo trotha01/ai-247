@@ -20,7 +20,10 @@ CORS is `*` (hls.js on Pages is a different origin). 503 if `manifest.json` is m
 - Manifest shapes accepted: Day 0 `{segments:[{file,duration}]}` (one block) or `{blocks:[{id,segments:[{uri,duration}]}]}` (bulletin, slate, replays; same layout as Day 1 `pool.channel_blocks`). Segment URIs are resolved as `seg/<uri>`, i.e. R2 key `PREFIX + uri`.
 - Manifest is cached in the isolate for 10 s.
 
-## Known limitation: manifest change mid-stream
+## Manifest change mid-stream (resolved: see `docs/MANIFEST-SWAP.md`)
+
+Below is the original limitation; the epoch/`cycle_start_k`/`cycle_start_dseq`/`prev` scheme now covers it.
+
 
 `k % N` is recomputed from whatever manifest is current. When Day 1 uploads a new hourly manifest (different N or contents), the segment behind a given media-sequence number can change for clients that have it cached, and the discontinuity-sequence count restarts from the new layout. hls.js recovers (reloads, may stall a few seconds) but it is not seamless. Fix options for Day 3: publish manifests with an `epoch` and a `cycle_start_k` so the swap happens only at a loop boundary, or have the generator emit the new manifest with `epoch` shifted to keep `k` continuous. Not done here to stay inside the Day 2 scope.
 
