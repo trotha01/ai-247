@@ -1,14 +1,11 @@
 # Handoff
-
 ## Objective
-AI-247 Day 2: Cloudflare Worker in worker/ serving a clock-computed rolling fake-live HLS playlist from R2 manifest.json, with unit + wrangler dev tests. Work only in worker/ and docs/. No deploy.
-
+Cancel stalled day1-episode run 42197984840 and re-dispatch (extractive, llm=off); watch result.
 ## Done
-- worker/src (playlist.js, index.js), wrangler.toml, 43 unit tests (golden vs Python reference) + 5 wrangler-dev tests, all pass.
-- docs/DAY2.md (behaviour, limitations, deploy checklist for Trevor).
-
+- 42197984840 confirmed in_progress on "Install system + python deps" (~28 min; job started 10:00:22Z); cancelled -> cancelled.
+- Log shows apt installing (dpkg unpack at 10:04:37Z), step is -qq so no pip/apt output after; stall point within apt/pip not determinable. Log's inputs not retrievable via API (inputs null).
+- Dispatched llm=off -> run 42203099252, but it was auto-cancelled (concurrency: pending replaced by newer pending). Two other dispatches landed same second by trotha01: 42203098918 (running) and 42203110356 (pending). Not mine to re-dispatch again.
 ## Pending
-- Nothing; PR #7 merged.
-
+- Watch 42203098918 / 42203110356; check install step < 10 min.
 ## Next step
-Trevor: follow the deploy checklist in docs/DAY2.md.
+Report outcome; if install stalls >10 min, report log and propose pip/apt timeout + cache fix (no push).
