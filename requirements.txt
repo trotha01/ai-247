@@ -6,3 +6,5 @@ soundfile>=0.12
 pytest>=8
 anthropic>=0.40
 boto3>=1.34
+pysbd>=0.3.4
+m3u8>=6.0
