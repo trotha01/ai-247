@@ -45,7 +45,10 @@ async function playlistText() {
   // 2. the page itself in Chromium: hls.js attaches, state live, time advances, segments are video/mp2t
   let browser;
   try {
-    browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+    // Prefer an installed Google Chrome (GitHub runners ship one; it decodes H.264/AAC), else the Playwright Chromium.
+    const launchArgs = { args: ["--autoplay-policy=no-user-gesture-required"] };
+    try { browser = await chromium.launch({ ...launchArgs, channel: "chrome" }); console.log("browser: google chrome"); }
+    catch { browser = await chromium.launch(launchArgs); console.log("browser: playwright chromium"); }
     const page = await (await browser.newContext()).newPage();
     const errors = [], segs = [];
     page.on("pageerror", (e) => errors.push(String(e)));
@@ -58,7 +61,8 @@ async function playlistText() {
     // (run 42229528561 sat at state=connecting after 60 s while 6 segments had already been fetched).
     const live = await page.waitForFunction(() => document.body.dataset.state === "live", null, { timeout: 120000 }).then(() => true, () => false);
     const state = await page.evaluate(() => document.body.dataset.state);
-    check("page reaches state live (or is fetching segments while connecting)", live || (state === "connecting" && segs.length > 0), `state=${state} segments=${segs.length}`);
+    if (codecOk) check("page reaches state live", live, `state=${state} segments=${segs.length}`);
+    else console.log(`SKIP state live: this browser cannot decode H.264/AAC (state=${state}, segments fetched=${segs.length}); delivery is checked instead`);
     if (codecOk) {
       await sleep(8000);
       const t = await page.evaluate(() => document.getElementById("video").currentTime);

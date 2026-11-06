@@ -107,7 +107,24 @@ before every call; the writer runs before discovery, so a stop only drops discov
 
 ## Measured run
 
-_Pending: filled in after the first dispatched episode of this build (Fable 5.1 plan + web-searching discovery, D1 history)._
+### This build: run 42238216216 (2026-11-06, `workflow_dispatch` on the branch, mode=topic, Fable 5.1 plan + discovery)
+
+| Measure | Value |
+|---|---|
+| Topic picked | `agent-harnesses` (77 uncovered items vs 61 for `ai-vfx`; both saturated the 12-item freshness window at 10.39, tie broken on id). The previous episode's topic was not known to this run: D1 refused the token and the render step of this commit had no R2 secrets yet (added in 1d03092), so dedupe did not apply here |
+| Primary pages read | 5 swapped in: github.com 5,976 chars, momentic.ai 5,945, pipod.dev 2,084 (3 HN/GitHub leads), Microsoft Research 522 -> 5,922, arXiv cs.GR 1,169 -> 3,462 |
+| Stories | 10 written from 5 sources, 9 aired (600.0 s, 100 segments, 44.5 s pad); 52 drafted lines, 37 supported first pass (71%), 6 rewritten (5 supported), 1 dropped, 0 extractive fallbacks; 36 aired sentences, **100% supported, 100% grounded, 0 unsourced** |
+| Plan call | Claude Fable 5.1, effort low: **0.02379 USD** |
+| Discovery call | Claude Fable 5.1, effort low, **3 web searches**: **0.29293 USD** (incl. 0.03 for the searches); accepted `verified-code-generation` ("Three feed items today (PDD Kit, LLM-to-Dafny, proof formalization) plus 5+ recent arXiv papers on verified code synthesis benchmarks", 12 matching items/links), committed to `topics/topics.json` by the run (5f23967) |
+| Writer + checker + repair | Claude Haiku 5.5: write 0.001835 + check 0.002893 + repair 0.00068 = **0.0054 USD** |
+| **Total** | **0.32213 USD per episode** (cap 0.75). At the 3-hourly cron: **about 2.6 USD/day, 77 USD/month**; 91% of it is the discovery call |
+| Wall-clock | fetch 4.8 s, topic research 19.1 s, script 46.3 s, discovery 19.5 s, TTS 234 s, render 316 s; pipeline 662 s; publish 102 s; job 18 min |
+| History | D1: `D1 API refused the token (Authentication error)` -> **needs Trevor: add Account -> D1 -> Edit to CLOUDFLARE_API_TOKEN**. Fallback worked: the record step read the R2 mirror (1 earlier entry) and wrote back 2 entries |
+| Published | `bulletins/20261106T150835Z/` (105 segments + manifests, 32.0 MB), `cycle_start_k` 163171: the Worker swaps it in at that media sequence (about 20 min after publish) |
+| Live check (runner) | playlist 200, media sequence rising 162971 -> 162972, 11 segments fetched as 200 video/mp2t, no console errors, label visible; the Playwright Chromium on the runner cannot decode H.264/AAC so the page ended in state offline there (the check now prefers the runner's Google Chrome and only asserts `state live` when the browser can decode) |
+
+Cost lever actually worth pulling: the discovery call. `NEWSBOT_DISCOVERY_SEARCHES=1` roughly halves it; `plan_model=claude-haiku-5-5`
+brings the whole episode back to ~0.01 USD; `settings.discovery_enabled: false` removes it.
 
 ### Baseline: first topic episode of the Haiku-only build (run 42229528561, 2026-11-06, before Trevor's four changes)
 

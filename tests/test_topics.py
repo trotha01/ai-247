@@ -240,6 +240,27 @@ def test_deepen_reads_leads_first_and_keeps_only_items_with_text(monkeypatch):
     assert rep["web"] == [{"api": "x"}] and len(rep["leads"]) == 1
 
 
+def test_r2_mirror_is_not_overwritten_when_its_read_failed(tmp_path, monkeypatch):
+    """Review finding: a transient R2 read error must not let record() replace the mirror with a shorter history."""
+    monkeypatch.setattr(topics, "HISTORY_PATH", tmp_path / "h.json")
+    monkeypatch.setattr(topics.r2, "r2_configured", lambda: True)
+    writes = []
+    monkeypatch.setattr(topics, "history_to_r2", lambda h, s3=None: writes.append(len(h["episodes"])))
+    (tmp_path / "episode").mkdir()
+    script = {"topic": {"id": "agent-harnesses"}, "stories": [{"source": "S", "url": "https://x/1", "headline": "h", "sentences": [{"text": "A."}]}]}
+    (tmp_path / "episode/script.json").write_text(json.dumps(script))
+    (tmp_path / "episode/report.json").write_text(json.dumps({"topic": {"mode": "topic"}, "llm": {}}))
+    (tmp_path / "publish.json").write_text(json.dumps({"prefix": "bulletins/x", "objects": 1}))
+    # 1. the mirror read raises -> no mirror write
+    monkeypatch.setattr(topics, "history_from_r2", lambda s3=None: (_ for _ in ()).throw(OSError("boom")))
+    r = topics.record(tmp_path, run_id="local-a", now=NOW)
+    assert r["r2_mirror"] is False and writes == []
+    # 2. the mirror read works (3 earlier entries) -> merged and written back with 4
+    monkeypatch.setattr(topics, "history_from_r2", lambda s3=None: history([ep(str(k), "t", f"2026-01-0{k}T00:00:00Z") for k in (1, 2, 3)]))
+    r = topics.record(tmp_path, run_id="9", now=NOW)
+    assert r["r2_mirror"] is True and writes == [5]   # 3 mirrored + run local-a from the local file + run 9
+
+
 def test_safe_name_strips_markup_and_caps_length():
     assert topics.safe_name("Robots <b>now</b> & \"world models\"\n" + "x" * 100) == ("Robots bnow/b & world modelsx" + "x" * 31)[:60]
     assert topics.safe_name("AI for VFX and film and video production") == "AI for VFX and film and video production"

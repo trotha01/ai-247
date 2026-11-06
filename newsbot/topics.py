@@ -27,7 +27,7 @@ TOPICS_PATH = Path(os.environ.get("NEWSBOT_TOPICS", "topics/topics.json"))
 # Local history file: tests / offline fixture runs only (NEWSBOT_HISTORY). Production history lives in D1.
 HISTORY_PATH = Path(os.environ["NEWSBOT_HISTORY"]) if os.environ.get("NEWSBOT_HISTORY") else None
 HISTORY_KEY = "episodes/history.json"          # R2 mirror of the history: read cache / fallback when D1 is unavailable
-HISTORY_STATUS: dict = {"backend": "none", "note": "", "needs_you": None}
+HISTORY_STATUS: dict = {"backend": "none", "note": "", "needs_you": None, "r2_read_ok": False}
 MAX_FETCH = int(os.environ.get("NEWSBOT_MAX_FETCH", str(research.MAX_FETCH)))
 SOURCE_CHARS = int(os.environ.get("NEWSBOT_TOPIC_SOURCE_CHARS", str(research.MAX_CHARS)))
 MAX_LEADS = 3            # HN leads (no feed text) fetched before ranking so they can compete
@@ -84,7 +84,7 @@ def load_history(path: Path | None = None, merge_r2: bool = False) -> dict:
     """D1 first (production), then the R2 mirror merged in, then the local file (tests/fixtures). Never raises."""
     path = HISTORY_PATH if path is None else path
     h = {"version": 1, "episodes": []}
-    HISTORY_STATUS.update(backend="none", note="", needs_you=None)
+    HISTORY_STATUS.update(backend="none", note="", needs_you=None, r2_read_ok=False)
     if path:                                   # tests / fixture runs: a local file is the store
         HISTORY_STATUS["backend"] = "file"
         if Path(path).exists():
@@ -101,7 +101,8 @@ def load_history(path: Path | None = None, merge_r2: bool = False) -> dict:
             print(f"history: {HISTORY_STATUS['note']}")
     if merge_r2 and r2.r2_configured():
         try:
-            other = history_from_r2()
+            other = history_from_r2()                 # None = no mirror yet (first publish): a successful read
+            HISTORY_STATUS["r2_read_ok"] = True
             if other:
                 h = merge_history(h, other)
                 if HISTORY_STATUS["backend"] in ("none",):
@@ -447,12 +448,17 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
             cfg["topics"].append({**entry_t, "added": today})
             save_topics(cfg)
             result["topic_added"] = entry_t["id"]
+    # Mirror to R2 only when this run actually read the mirror (or D1 gave the full history): a transient R2 read
+    # failure must never overwrite the mirror with a history that lacks the earlier entries (review finding).
     if r2.r2_configured():
-        try:
-            history_to_r2(h)
-            result["r2_mirror"] = True
-        except Exception as e:
-            print(f"history: R2 mirror write failed ({type(e).__name__})")
+        if HISTORY_STATUS.get("r2_read_ok") or result["d1_written"]:
+            try:
+                history_to_r2(h)
+                result["r2_mirror"] = True
+            except Exception as e:
+                print(f"history: R2 mirror write failed ({type(e).__name__})")
+        else:
+            print("history: R2 mirror NOT rewritten (its read failed this run); the entry is in D1/the artifact only")
     if result["needs_you"]:
         print(f"::warning::history store needs Trevor: {result['needs_you']}")
     print("recorded:", json.dumps(result))
