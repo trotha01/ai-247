@@ -41,10 +41,11 @@ AI-247: make the GitHub Actions episode cron fire unattended and prove it (a sch
 ## Coordination
 - A separate worker (ai247-coverage, `cloud/ai247-coverage`, PR #33 merged) moved the cadence to hourly in `hourly.yml` (`hourly-bulletins`, cron `23 * * * *`); `day1.yml` is now `workflow_dispatch` only. This task does not touch cadence, cron line or render length. Its proof target is therefore any `schedule` run of `hourly-bulletins`. Trigger facts both workflows share: the gate variable pattern (`*_CRON_ENABLED != 'false'`, unset = runs), the Trigger step pattern, and the replay fetch by file name.
 
+- 17:23Z and 18:23Z slots also missed (18:48Z: still 0 schedule runs repo-wide; five slots total). docs/PLAN.md section "Schedule trigger: not proven on day one" written on this branch; PR to main.
+
 ## Pending
-- 17:23Z and 18:23Z `hourly-bulletins` slots (poller running on the repo-wide schedule run list).
-- If a `schedule` run appears and is green: verify R2 + `/healthz`, write the PLAN.md section, PR, merge, status done.
-- If not: PLAN.md records the diagnosis; status `needs_you` for Trevor: (a) toggle the workflow off/on in Actions (community-suggested probe), (b) open a GitHub Support ticket with the run history (0 schedule events since repo creation 07:59:56Z), or (c) approve the Cloudflare cron fallback and create the PAT for it.
+- Merge the PLAN.md PR after ci + worker-site-e2e + claude-review.
+- **needs_you (Trevor)**, nothing in the repo is left to fix: (a) toggle the workflow off/on in Actions (community-suggested probe), (b) open a GitHub Support ticket with the run history (0 schedule events since repo creation 07:59:56Z), or (c) approve the Cloudflare cron fallback and create the PAT for it.
 
 ## Next step
-Wait for the poller (17:23Z / 18:23Z). Then either the proof section or the needs_you handoff, via PR to main (ci + worker-site-e2e + claude-review required).
+Trevor picks (a), (b) or (c). Whoever continues: watch `actions/runs?event=schedule`; the first run's Trigger log says `event=schedule`; then replace the PLAN.md verdict with the run id and time, and mark the todo done.
