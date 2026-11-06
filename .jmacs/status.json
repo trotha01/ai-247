@@ -1,1 +1,1 @@
-{"state":"running","msg":"Steps 1-4 landed via PR #24 and verified (/healthz live-manifest, max_age_s 14400, pool.ok). Follow-up PR #28 open (post-publish verification + guard hardening); waiting for ci + claude-review, then merge"}
+{"state":"done","msg":"PR #24 (seed, daily guarded refresh, MAX_MANIFEST_AGE_S 14400) and PR #28 (post-refresh verification, newer-pool guard, --min-segments) both merged to main (e9fdd8c), all checks + claude-review green; /healthz: live-manifest, max_age_s 14400, pool.ok 200 segments; next pool refresh 2026-11-07 04:41 UTC"}
