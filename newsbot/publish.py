@@ -113,8 +113,8 @@ def publish_many(outs: list[Path], s3, bucket: str, now: float | None = None, ru
     root["published"] = ts
     _put_json(s3, bucket, root, ROOT_MANIFEST, log)  # last
 
-    fresh_s = sum(s["duration"] for b in blocks[:loop_from] for s in b["segments"])
     rendered_s = sum(s["duration"] for b in fresh for s in b["segments"])
+    fresh_s = rendered_s + sum(s["duration"] for b in inherited for s in b["segments"])  # also right when loop_from fell back to 0
     summary = {"prefix": f"bulletins/{first}", "run_ts": ts, "objects": len(log), "bytes": sum(x["bytes"] for x in log),
                "segments": sum(1 for x in log if x["key"].endswith(".ts")), "last_key": log[-1]["key"],
                "epoch": root["epoch"], "cycle_start_k": root["cycle_start_k"], "cycle_start_dseq": root["cycle_start_dseq"],

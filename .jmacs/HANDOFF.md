@@ -1,29 +1,26 @@
 # Handoff
 
 ## Objective
-AI-247 topic research stage (docs/TOPICS.md), approved by Trevor 2026-11-06 with four changes (web-searching
-discovery, no daily cap, history in Cloudflare D1, Fable 5.1 low effort for plan + discovery; Haiku 5.5 writer/checker).
-Branch `cloud/ai247-topics`, PR #29. Done = episode plays on https://ai-247.pages.dev, measured cost in TOPICS.md,
-PR merged (ci + worker-site-e2e + claude-review required by the main ruleset).
+AI-247: hourly cadence with >= 60 min of new footage per run (Trevor's rule: produced minutes >= cadence minutes), playlist prefers fresh bulletins and falls back to replays only when fresh footage is exhausted. Branch `cloud/ai247-coverage`.
 
 ## Done
-- All four changes implemented and unit-tested (99 Python + 73 Worker tests): newsbot/discovery.py (Fable + web_search),
-  newsbot/history_db.py (D1 via REST), topics.py/day1.py wiring, llm.py pricing + cap 0.75, Worker D1 binding +
-  /history.json, deploy.yml D1 step, day1.yml secrets/inputs, docs. Sibling session's two review rounds folded in; it
-  has stopped (its side branch cloud/ai247-topics-fixes is folded in; deleting it is blocked from here by the proxy).
-- Verification episode run 42238216216 green end to end: topic agent-harnesses, 9 stories, 100% supported, published
-  bulletins/20261106T150835Z, discovery added `verified-code-generation` (committed 5f23967). Measured cost 0.32213 USD
-  (discovery 0.293, plan 0.024, Haiku writer 0.005). Table in docs/TOPICS.md "Measured run".
-- D1: the current CLOUDFLARE_API_TOKEN lacks D1 permission ("Authentication error"); the R2 mirror fallback worked.
-- Review finding fixed: the R2 mirror is only rewritten when its read succeeded (test added).
+- Survey: docs/PLAN.md, day1.yml, newsbot/, Worker (playlist.js / failover.js / channel.js), docs/MANIFEST-SWAP.md, FAILOVER.md, R2_LAYOUT.md, the cron worker's HANDOFF (cloud/ai247-cron: PRs #25 and #30 merged; 0 schedule runs ever; waiting for the 15:23Z slot) and the topics worker's HANDOFF + docs/TOPICS.md (cloud/ai247-topics, PR #29 open: rewrites day1.yml, day1.py, llm.py, wrangler.toml, test_day1_output.py; avoid those files).
+- Measured from runs 42235237153 / 42214045472 / 42229528561: one 10-min episode (100 x 6 s) renders in 376-594 s pipeline (TTS+plan 190-210 s, render+encode 280-320 s, ~1x real time), whole job 10-15 min; render step limit 25 min; job limit 35 min (GitHub max 6 h); R2 publish of 108 objects 91-144 s sequential.
+
+- Implemented on this branch: `.github/workflows/hourly.yml` (cron `23 * * * *`; plan -> render matrix of 6 x 10-min bulletins -> stitch/publish, HOURLY_LLM_SLICES default 1, HOURLY_CRON_ENABLED switch), `newsbot/hourly.py` (aired-URL memory from R2 per-bulletin manifests, dedupe, never-aired first, dealing with per-source caps, shortfall handling, job summary), `newsbot/publish.py publish_many` (bulletins/<ts>-NN/, 12 parallel uploads, loop_from, pending-manifest inheritance, 6 replays), `newsbot/channel.py` + `worker/src/playlist.js`/`failover.js` (`loop_from`: fresh once then loop; swap at end of fresh region else k+margin; legacy unchanged), `rank.py` NEWSBOT_PER_SOURCE_CAP, `feeds.py` arXiv limit 60, day1.yml cron removed (dispatch only). Tests: 99 Worker (unit + wrangler dev + layout e2e), 60+ Python incl. JS golden vectors. Docs: PLAN.md "Hourly cadence" (measurements, cost table, honest supply limit), MANIFEST-SWAP.md, R2_LAYOUT.md, FAILOVER.md.
+
+- PR #33 merged (squash 9d5ec65, 15:47Z) after three Claude review rounds: one real bug fixed (the NEWSBOT_NO_LLM expression always disabled Haiku), the R2 listing bounded, stitch-job summary deps, shared concurrency group `episode-publish` with day1-episode, no-slate fallback, rendered vs inherited minutes. `tests` and `worker-site-e2e` each hit the 8-minute install stall once on older heads (not this PR's), green on the merged head. deploy.yml run 42246388079 redeployed the Worker (15:50Z) with the loop_from support.
+- Branch restarted from main for PR 2.
 
 ## Pending
-- Trevor: add **Account -> D1 -> Edit** to CLOUDFLARE_API_TOKEN (then the next run creates `ai247-history`, imports the
-  R2 mirror, and deploy.yml binds it to the Worker). Decide on spend: 0.32 USD/episode = ~2.6 USD/day on the 3-hourly
-  cron (77 USD/month) vs the 10 USD monthly limit; levers in TOPICS.md "Cost".
-- Playback proof of the new bulletin from the sandbox (airs at media sequence 163171, ~15:33Z); ci + claude-review on
-  the final head (the review sees a diff truncated at 150 KB, PR is 180 KB: one of its two blocking findings is that
-  artifact); merge PR #29; final status.
+- Merge PR #34 (all three checks green on 50f9574; the PLAN.md run 3 push re-runs them once more), then status done.
+- Cron proof: 16:23Z slot produced no run; the 17:23Z slot is the next chance (hourly.yml on main since 15:47Z; the Trigger step prints `event=schedule`). If it never fires, that is a GitHub-side question (same symptom as the Day 1 cron), not something in the repo.
+
+## Done since PR #33
+- Verification run 1 (main): 2 of 6 bulletins (Day 1 floor of 10 stories rejected 3 full bulletins with 9; 1 install stall); swap at 16:51:26Z verified on pages.dev.
+- Run 2 (branch, floor 6): 3 of 6 (3 install stalls); swap landed exactly at run 1's fresh end (164181).
+- Run 3 (branch, install fix): **6 of 6, 60.0 min rendered and published in 15 min**, 613 objects / 195 MB in 80 s, run 2's 3 pending bulletins inherited in front (90 min fresh region), coverage check passed; pages.dev playing run 2's first bulletin at 17:12Z with 0 errors. Haiku slice 0.00583 USD.
+- Fixes in PR #34: NEWSBOT_MIN_STORIES (6 for slices), install steps bounded per stage with fast-failing pip and 20-minute budgets (hourly.yml and ci.yml), vitest 30 s per-test timeout for the wrangler dev suites, fresh_minutes with inherited blocks, merge of main (PR #29) with the topic test restored, PLAN.md "Verification runs".
 
 ## Next step
-Commit/push these fixes, confirm playback of bulletins/20261106T150835Z, get checks green, merge, set status done.
+Squash-merge PR #34 when the re-run is green, write status done, check the 17:23Z cron slot.
