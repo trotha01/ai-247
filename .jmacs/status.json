@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #31 was green but conflicted with main (other session .jmacs files); merged main into cloud/ai247-readme, waiting for checks to re-run, then squash-merge"}
+{"state":"done","msg":"README live-site line merged to main as d531dd3 (PR #31, checks tests/worker-site-e2e/claude-review green). jmacs CLI not available in the cloud session; set the todo done on your side."}
