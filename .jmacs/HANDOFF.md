@@ -1,31 +1,24 @@
 # Handoff
 
 ## Objective
-AI-247 "fix PR 8 check and test R2 upload": get PR #8 (Day 3 dark-mode link colour + docs) green and merged; exercise the real R2 upload once and record the result in docs/PLAN.md.
+AI-247: make the GitHub Actions episode cron (`day1-episode`, `23 */3 * * *`) fire unattended and prove it (a schedule-triggered run succeeds end to end, a new episode + root `manifest.json` land in R2, `/healthz` on the `ai247-live` Worker reflects it), then triage stale AI-247 todos and draft PR #14. Record the proof in docs/PLAN.md.
 
 ## Done
-- Read ci.yml, day0.yml, day1.yml, newsbot/r2.py, docs/PLAN.md, docs/DAY2.md, docs/R2_LAYOUT.md, PRs #8, #11 (merged), #12 (merged), #13 (merged).
-- PR #8 run 42202479950: apt finished 10:56:22, then no output inside `pip install -q` until the 15 min job timeout cancelled it at 11:08:33. Same stall PR #12 fixed on main; PR #8's branch is 7 commits behind main.
-- day1.yml has NO R2 upload (newsbot/day1.py never calls r2.py). The uploader is only called from newsbot/pipeline.py (Day 0), and day0.yml passes the R2_* secrets. So the upload test uses the day0-bulletin workflow on main.
-
-- PR #8 branch updated from main via the REST update-branch route (head ef3d049); ci run 42211791142 in progress.
-- day0-bulletin run 42211796435 on main (dispatched before the orchestrator's correction): green, stage r2_upload 18.36 s with the real secrets, Day 0 layout bulletins/<ts>/ (manifest.json before segments).
-- Orchestrator correction received: wire the upload into Day 1. Done on this branch: newsbot/channel.py (Python port of the Worker swap math, vectors checked against worker/src/playlist.js), newsbot/publish.py (segments first, per-block manifest after its segments, root manifest.json last in one PutObject; replays from the live manifest; skip with a log line without secrets), r2.py client()/bucket() helpers, tests/test_publish.py (17 tests, pass), day1.yml step "Publish to R2" after the Tests step with the four R2_* secrets, ci.yml runs the new test, docs/R2_LAYOUT.md section.
-
-- PR #18 (this work) ci green (tests + worker-site-e2e), squash-merged to main as 31f27fb. Branch restarted from main for the docs note.
-- PR #8 ci re-run after update-branch: tests job green; worker-site-e2e timed out in its Node install step (npm ci / playwright install, no output for 8 min, the same transient stall; the identical job on PR #18 passed minutes later). Re-run 1 of 2 requested (gh run rerun --failed).
-- day1-episode dispatch 1 of 2: llm=off, run 42212912268 on main (head 31f27fb).
-- PR #8 re-run green (tests + worker-site-e2e); squash-merged to main as 218a784. Part A complete.
-
-- Run 42212912268 (llm=off) green: Publish step wrote bulletins/20261106T115430Z/seg_000..099.ts (video/mp2t), the block manifest, slate/slate_000..004.ts + manifest, then root manifest.json last; 108 objects, 34,139,323 bytes, 116 s; cycle_start_k 161021, epoch 1793000000, no prev.
-- Dispatch 2 of 2: llm=on, run 42214045472 green. Publish read the live manifest (cycle_start_k=161021), wrote bulletins/20261106T120928Z/ (100 seg + manifest, 5 slate + manifest), then root manifest.json last: cycle_start_k 161231, cycle_start_dseq 4, replay = run 1 bulletin, prev = run 1 manifest. 108 objects, 33,533,180 bytes, 91 s. Haiku cost 0.00495 USD.
-- docs/PLAN.md section "R2 upload verified" complete on this branch.
-- Live endpoint: Worker now deployed (PRs #19-#23). Its host and pages.dev are blocked from the sandbox (proxy 403 / ENOTFOUND), so the read-only check is the deploy smoke test log (run 42215042026): /healthz ok source=live-manifest, /live.m3u8 media-sequence 161138 -> 161139, fetched seg/bulletins/20261106T115430Z/seg_012.ts video/mp2t 295,536 bytes = run 1's upload. Recorded in PLAN.md.
-- PR #22 (docs note) was 'dirty' against main (other workers' .jmacs edits), so GitHub created no ci run for 30 min; merged main in (kept this task's .jmacs), pushed.
+- Search: docs/PLAN.md, DEPLOY.md, FAILOVER.md, R2_LAYOUT.md, `.jmacs/HANDOFF.md` + `status.json` on every `cloud/*` branch, all 23 PRs (REST; `gh pr list` GraphQL is blocked here), the day1-episode run list via REST, the job log of run 42214045472. `kb search` / `jmacs` are not installed in the cloud session (not on PATH, nothing under /Users), so todo verdicts are recorded here instead of with `jmacs todo done`.
+- Diagnosis (no scheduled run has ever existed: `actions/runs?event=schedule` total_count 0 for the whole repo):
+  - The cron landed on `main` at 09:48:54Z (PR #3) and the file was last changed on main at 11:47Z (PR #18). The only cron slot since then was 12:23Z and it did not fire. Workflow state `active`, repo not a fork, not archived, pushed_at 12:47Z (no 60-day inactivity), `DAY1_CRON_ENABLED` unset per the golive handoff (a `false` value would still create a run with the job skipped, and there is no run at all), nothing was running at 12:23Z (last dispatch ended 12:10Z, concurrency is queue-not-cancel). Repo variables and Actions permissions are 403 through the session proxy, so they are not read directly.
+  - Conclusion: nothing in the repo blocks the schedule; one slot was missed, consistent with GitHub's documented delay/drop of `schedule` events (and the file having been re-registered 36 min before the slot). The fix PR is itself a push to `main` that re-syncs the schedule.
+  - Real bug found in the same workflow: the replay step ran `gh run list --workflow day1-episode.yml`, which is a FILE lookup and 404s (confirmed in the run log), so no replay artifact was ever fetched (`replay_blocks: 0`). Fixed to `day1.yml`. R2 publishing was unaffected (it takes replays from the live manifest).
+  - Budget/price guard on a scheduled run: `inputs.*` are empty, so TTS = kokoro and the Haiku writer is on. The cap is a preflight guard (`Meter.preflight`): a call that could cross 0.05 USD is skipped, the rest goes extractive, `budget_abort` is recorded and the run stays green; `test_render_under_25_minutes_and_cost_cap` only asserts cost <= cap. Observed cost 0.005 USD/run; 8 runs/day is ~1.2 USD/month, inside the 10 USD monthly limit. Documented in the workflow header.
+- day1.yml on this branch: header comment with the schedule facts, a "Trigger" step that logs `event=` (schedule vs workflow_dispatch; no secrets), the replay `--workflow day1.yml` fix. Cron line unchanged (`23 */3 * * *`).
+- Live check from this session (hosts allowed in the personal environment "ai-247"): `/healthz` ok, `source=live-manifest`, manifest uploaded 12:10:59Z (run 42214045472), 205 segments / 3 blocks; `pool/manifest.json` now exists (built 13:05:53Z from R2, so the replay-pool workflow has been run).
 
 ## Pending
-- Docs PR from this branch: merge after ci, then status done.
-- "R2 upload verified" note in docs/PLAN.md via PR from this branch; merge after ci; status done.
+- PR for this branch: open, wait for ci, merge to main (before the 15:23Z slot).
+- Wait for the 15:23Z scheduled run; verify success, Publish step keys, root manifest in R2 via `/healthz` (`manifest.uploaded` after 15:23Z, blocks 3 with the new bulletin first).
+- Close draft PR #14 (cloud/ai247-deploy, `.jmacs/` only; deploy.yml landed via PRs #15/#17) with a comment.
+- Todo triage: jmacs unavailable here; verdicts in the final handoff for the orchestrator to apply.
+- docs/PLAN.md section "Cron proven".
 
 ## Next step
-Merge the docs PR after ci; set status done.
+Open the PR, merge after ci, then poll `actions/workflows/409166637/runs?event=schedule` from 15:23Z.
