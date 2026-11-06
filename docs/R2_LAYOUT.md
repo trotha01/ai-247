@@ -55,6 +55,19 @@ manifest.json   {"version":2,"segment_seconds":6,"epoch":<unix>,
 
 Known limitation unchanged from `docs/DAY2.md`: swapping the manifest mid-stream changes what `k % N` maps to.
 
+## Hourly uploader (implemented: `newsbot/publish.py publish_many`, stitch job of `hourly.yml`)
+
+Per hourly run (`<ts>` = the plan job's run timestamp, `NN` = slice number 00..05), after every slice's render passed its tests:
+
+```
+bulletins/<ts>-NN/seg_000.ts .. seg_099.ts     video/mp2t         (every rendered slice, uploads 12 in parallel)
+bulletins/<ts>-NN/manifest.json                application/json   (per-bulletin, after its segments; its `sources` are the aired-URL memory the planner reads)
+bulletins/<ts>-00/slate/slate_000.ts .. _004.ts + manifest.json   (one slate per run)
+manifest.json                                  application/json   (root, ONE PutObject, LAST)
+```
+
+Root blocks: `[bulletin <ts>-00 .. <ts>-05, slate, replay x up to 6 (the previous hour's bulletins, newest first)]`, `loop_from` = number of fresh blocks (docs/MANIFEST-SWAP.md "Fresh footage first"). `newsbot/replay_pool.py` keeps working: `bulletins/<ts>-NN/manifest.json` is still one level below `bulletins/` and the ids sort by time.
+
 ## Day 1 uploader (implemented: `newsbot/publish.py`, step "Publish to R2" in `day1.yml`)
 
 Runs only after the render passed its tests, and only when the four `R2_*` secrets exist (otherwise one log line,
@@ -68,7 +81,7 @@ bulletins/<ts>/slate/manifest.json             application/json
 manifest.json                                  application/json   (root channel manifest, ONE PutObject, LAST)
 ```
 
-The root manifest's cycle is `[bulletin <ts>, slate <ts>/slate, up to 3 replays]`, where the replays are the
+The root manifest's cycle is `[bulletin <ts>, slate <ts>/slate, up to 6 replays]` with `loop_from 1`, where the replays are the
 bulletin/replay blocks of the manifest that was live (already in R2, so nothing is re-uploaded; `uri` is the full
 key). Continuity fields `epoch` (taken from the live manifest, else `newsbot.channel.EPOCH` = the Worker's
 `EPOCH` var), `cycle_start_k`, `cycle_start_dseq` and `prev` follow `docs/MANIFEST-SWAP.md`; the Python port in

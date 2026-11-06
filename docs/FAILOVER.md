@@ -14,7 +14,7 @@ Checked on every manifest reload (cache 10 s, `MANIFEST_TTL_MS`), in this order;
 | `missing` | `{PREFIX}manifest.json` is not in the bucket |
 | `invalid` | not JSON |
 | `empty` | no segments, a segment with duration <= 0, or a bad `cycle_start_k`/`prev` chain (what `layout()`/`eras()` reject) |
-| `stale` | `MAX_MANIFEST_AGE_S > 0` and R2's upload time of `manifest.json` is older than that. Deployed value `14400` (4 h): the 3-hourly `day1-episode` cron (`23 */3`, up to 35 min) normally republishes within ~3.6 h, so one missed or failed run switches the channel to the pool until the next publish lands. `0` turns the rule off (a looping manifest is still valid content); `/healthz` reports `manifest.age_s` either way. |
+| `stale` | `MAX_MANIFEST_AGE_S > 0` and R2's upload time of `manifest.json` is older than that. Deployed value `14400` (4 h). Since the hourly cadence (`hourly-bulletins`, cron `23 * * * *`, publishes ~25 min later) that is three missed runs; in between, a manifest whose fresh footage is exhausted already loops the previous hour's bulletins itself (`loop_from`, docs/MANIFEST-SWAP.md), which is the same content the pool would give. `0` turns the rule off (a looping manifest is still valid content); `/healthz` reports `manifest.age_s` either way. |
 | `missing-segment` | one of the next `CHECK_SEGMENTS` (default 5) segments the live mapping would list is not in R2 (HEAD). Checked before any client is sent that URI. |
 
 If the live manifest is unusable and the pool is unusable too, the Worker keeps serving the last good manifest from memory (`source: live-manifest-cached`); only with no history at all does `/live.m3u8` answer 503.

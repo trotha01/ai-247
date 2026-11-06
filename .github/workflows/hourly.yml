@@ -1,0 +1,245 @@
+name: hourly-bulletins
+
+# Hourly cadence (docs/PLAN.md "Hourly cadence"). Trevor's rule: a cron that fires once an hour must produce at least
+# an hour of new footage per run, so the channel never has to repeat old footage because the new footage is too short.
+#
+# One run = three stages:
+#   plan    one feed fetch (every working candidate feed), stories that aired before pushed to the back (aired-URL memory
+#           read from the per-bulletin manifests in R2), dealt into up to 6 slices of 14 stories (newsbot/hourly.py);
+#   render  one 10-minute bulletin per slice, 6 jobs in parallel (same pipeline as day1-episode, `--items-json`), each
+#           job well inside the 25-minute render limit (a 10-minute episode renders in 6-10 min on a 4 vCPU runner);
+#   stitch  all rendered bulletins are published in slice order as the fresh blocks of ONE root manifest (`loop_from`:
+#           fresh plays once, then slate + the previous hour's bulletins loop, docs/MANIFEST-SWAP.md "Fresh footage first").
+#
+# Scheduled runs: GitHub fires `schedule` only from this file on the default branch (main), at most every 5 minutes,
+# delayed or dropped under load (minute 23 avoids the top-of-hour rush), and switches the cron off after 60 days
+# without repository activity. Stop it without a commit: repo variable HOURLY_CRON_ENABLED = "false", or
+# `gh workflow disable hourly-bulletins -R trotha01/ai-247`. A cron run has no `inputs`, so the defaults below apply.
+#
+# Cost (docs/PLAN.md has the measured numbers): only the first HOURLY_LLM_SLICES bulletins per run (repo variable,
+# default 1) use the Claude Haiku writer + fact check (~0.005 USD per bulletin, per-process cap NEWSBOT_MAX_RUN_USD
+# 0.05); the others take the extractive path (0 USD). 24 runs/day x 1 Haiku bulletin = ~0.12 USD/day, ~3.6 USD/month,
+# inside the 10 USD monthly limit; 2 slices ~7 USD/month; all 6 would be ~22 USD/month and needs Trevor to raise the cap.
+# Runner minutes are free for this public repo; a run uses ~7 jobs x 3-15 min, 6 of them concurrent (limit 20).
+on:
+  workflow_dispatch:
+    inputs:
+      slices:
+        description: "Bulletins to render per run (10 min each; 6 = one hour)"
+        required: false
+        default: "6"
+        type: string
+      llm_slices:
+        description: "How many of the slices use the Claude Haiku writer (blank = repo variable HOURLY_LLM_SLICES, else 1)"
+        required: false
+        default: ""
+        type: string
+      tts:
+        description: "Force TTS engine (blank = kokoro with espeak-ng fallback)"
+        required: false
+        default: ""
+        type: choice
+        options: ["", "kokoro", "espeak-ng"]
+  schedule:
+    - cron: "23 * * * *"   # hourly, off the top of the hour: GitHub delays/drops scheduled runs under load at :00
+
+permissions:
+  contents: read
+  actions: read   # to download this run's own artifacts (gh run download) in the stitch job
+
+concurrency:
+  group: hourly-bulletins
+  cancel-in-progress: false
+
+env:
+  SLICES: ${{ inputs.slices || '6' }}
+  LLM_SLICES: ${{ inputs.llm_slices || vars.HOURLY_LLM_SLICES || '1' }}
+  INSTALL_PKGS: libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng
+
+jobs:
+  plan:
+    # never on forks; the cron can be switched off with the HOURLY_CRON_ENABLED variable
+    if: github.repository == 'trotha01/ai-247' && (github.event_name != 'schedule' || vars.HOURLY_CRON_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      slices: ${{ steps.plan.outputs.slices }}
+      run_ts: ${{ steps.plan.outputs.run_ts }}
+    steps:
+      - name: Trigger
+        # One line per run saying how it was started (schedule vs dispatch) and the cron switch. HOURLY_CRON_ENABLED is
+        # a repository *variable* (not a secret); the job-level `if` skips a scheduled run only when it is exactly "false".
+        env:
+          CRON_SWITCH: ${{ vars.HOURLY_CRON_ENABLED }}
+        run: |
+          echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
+          echo "HOURLY_CRON_ENABLED=${CRON_SWITCH:-<unset>} SLICES=$SLICES LLM_SLICES=$LLM_SLICES"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (feeds + R2 client only)
+        timeout-minutes: 5
+        run: timeout 240 pip install --timeout 60 --retries 3 feedparser boto3
+      - name: Plan the slices (one feed fetch, aired-URL memory from R2)
+        id: plan
+        # R2 secrets are read by boto3 from the environment (never printed); without them the aired memory is skipped.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          python -m newsbot.hourly plan --out plan --slices "$SLICES"
+          echo "slices=$(cat plan/slices.json)" >> "$GITHUB_OUTPUT"
+          echo "run_ts=$(python -c "import json;print(json.load(open('plan/plan.json'))['run_ts'])")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plan
+          path: plan/
+          retention-days: 3
+
+  render:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false   # one bad slice must not cancel the others: the stitch publishes whatever rendered
+      matrix:
+        slice: ${{ fromJSON(needs.plan.outputs.slices) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Runner specs
+        run: |
+          echo "slice ${{ matrix.slice }} of $SLICES; nproc: $(nproc)"; free -m | head -2; lscpu | grep -E "Model name"; df -h . | tail -1
+      - name: Install system + python deps
+        # Same stall guard as day1.yml: hard step timeout, bounded apt/pip network timeouts, up to 3 attempts.
+        timeout-minutes: 8
+        run: |
+          start=$SECONDS
+          APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for attempt in 1 2 3; do
+            if $APT update -qq \
+               && $APT install -y -qq $INSTALL_PKGS \
+               && { command -v ffmpeg >/dev/null || $APT install -y -qq ffmpeg; } \
+               && timeout 300 pip install --timeout 60 --retries 3 -r requirements.txt; then
+              echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
+            fi
+            echo "install attempt $attempt failed; retrying in 10 s"; sleep 10
+          done
+          echo "install failed after 3 attempts"; exit 1
+      - uses: actions/cache@v6
+        with:
+          path: models
+          key: kokoro-int8-v1.0
+      - name: Download the plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n plan -D plan && ls plan
+      - name: Render bulletin (hard limit 25 minutes)
+        timeout-minutes: 25
+        env:
+          # The Claude key is only handed to the first LLM_SLICES slices (read by the SDK from the environment, never
+          # echoed); the other slices run the extractive script (NEWSBOT_NO_LLM) and cost nothing.
+          ANTHROPIC_API_KEY: ${{ matrix.slice < fromJSON(env.LLM_SLICES) && secrets.ANTHROPIC_API_KEY || '' }}
+          NEWSBOT_NO_LLM: ${{ matrix.slice < fromJSON(env.LLM_SLICES) && '' || '1' }}
+          NEWSBOT_PER_SOURCE_CAP: "4"     # the planner already mixed sources per slice (<= 4 each)
+          NEWSBOT_TOPIC_MODE: "off"       # the topic research stage (PR #29) is not run per slice; it has its own budget
+        run: |
+          start=$SECONDS
+          python -m newsbot.day1 --out out1 --items-json "plan/slice_${{ matrix.slice }}.json" ${{ inputs.tts != '' && format('--tts {0}', inputs.tts) || '' }}
+          echo "pipeline wall-clock: $((SECONDS-start)) s"
+      - name: Print run report (no secrets in it)
+        if: always()
+        run: cat out1/report.json | head -c 6000 || true
+      - name: Tests (acceptance + seam on the real render)
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -q tests/test_day1_output.py tests/test_seam.py
+      - name: Job summary
+        if: always()
+        run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bulletin-${{ matrix.slice }}
+          path: |
+            out1/episode/
+            out1/slate/
+            out1/report.json
+          retention-days: 3
+
+  stitch:
+    needs: [plan, render]
+    if: always() && needs.plan.result == 'success'   # publish whatever rendered, even if a slice failed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (R2 client only)
+        timeout-minutes: 5
+        run: timeout 240 pip install --timeout 60 --retries 3 boto3
+      - name: Download this run's bulletins and plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p bulletins
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n plan -D plan
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -p 'bulletin-*' -D bulletins || true
+          # one directory per rendered bulletin, in slice order; a bulletin whose render failed has no directory
+          dirs=$(ls -d bulletins/bulletin-* 2>/dev/null | sort -t- -k2 -n | tr '\n' ' ')
+          echo "rendered: $dirs"
+          [ -n "$dirs" ] || { echo "::error::no bulletin rendered: nothing to publish"; exit 1; }
+          echo "DIRS=$dirs" >> "$GITHUB_ENV"
+      - name: Publish to R2 (every segment first, root manifest.json last; skipped without the R2 secrets)
+        # Fresh blocks in slice order with loop_from (docs/MANIFEST-SWAP.md), replays = the previous hour's bulletins.
+        timeout-minutes: 12
+        env:
+          RUN_TS: ${{ needs.plan.outputs.run_ts }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          # publish.py expects <dir>/episode/manifest.json: the artifact holds episode/ and slate/ directly under the dir
+          python -m newsbot.publish --run-ts "$RUN_TS" $DIRS
+      - name: "Coverage check: Trevor's rule, >= 60 min of new footage per hourly run"
+        run: |
+          first=$(echo $DIRS | cut -d' ' -f1)
+          if [ -f "$first/publish.json" ]; then
+            mins=$(python -c "import json;print(json.load(open('$first/publish.json'))['fresh_minutes'])")
+            echo "new footage published this run: $mins min"
+            python -c "import sys; sys.exit(0 if float('$mins') >= 60 else 1)" || echo "::warning::only $mins min of new footage this run (target 60): see the job summary for the slice shortfall"
+          else
+            echo "::warning::nothing published (R2 secrets missing or publish failed)"
+          fi
+      - name: Live check (Worker /healthz and playlist, read-only)
+        # The new manifest must be in R2 (uploaded after this run started) and the Worker must still serve a playlist.
+        continue-on-error: true
+        run: |
+          url=$(python -c "import json,urllib.parse;u=json.load(open('site/config.json'))['streamUrl'];p=urllib.parse.urlsplit(u);print(f'{p.scheme}://{p.netloc}')")
+          curl -sS -m 20 "$url/healthz" | tee healthz.json | head -c 1500; echo
+          curl -sS -m 20 -I "$url/live.m3u8" | head -5
+          python - <<'EOF'
+          import json, datetime as dt
+          h = json.load(open("healthz.json"))
+          print("source:", h.get("source"), "| manifest uploaded:", h["manifest"].get("uploaded"), "| segments:", h["manifest"].get("segments"), "| blocks:", h["manifest"].get("blocks"))
+          EOF
+      - name: Job summary
+        if: always()
+        run: python -m newsbot.hourly summary plan $DIRS >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hourly-publish
+          path: |
+            plan/
+            bulletins/*/publish.json
+            bulletins/*/report.json
+            healthz.json
+          retention-days: 14

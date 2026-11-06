@@ -1,6 +1,7 @@
-"""Day 1 R2 publisher with a fake S3 client: upload order (segments first, root manifest.json last), key layout
-(docs/R2_LAYOUT.md Layout B), content types, replays taken from the manifest already in R2, continuity fields
-(docs/MANIFEST-SWAP.md) equal to the Worker's JS reference (vectors computed with worker/src/playlist.js)."""
+"""R2 publisher with a fake S3 client: upload order (segments first, root manifest.json last), key layout
+(docs/R2_LAYOUT.md Layout B), content types, replays taken from the manifest already in R2, multi-bulletin runs with
+`loop_from` (fresh blocks once, then slate + replays), continuity fields (docs/MANIFEST-SWAP.md) equal to the Worker's
+JS reference (vectors computed with worker/src/playlist.js, incl. worker/test/fixtures/swap-v3-golden.json)."""
 import hashlib
 import io
 import json
@@ -81,7 +82,9 @@ def test_first_publish_layout_order_and_types(tmp_path):
     root = json.loads(s3.objects["manifest.json"][0])
     assert root["epoch"] == channel.EPOCH and root["segment_seconds"] == 6 and "prev" not in root
     assert root["cycle_start_k"] == 1000 + channel.MARGIN and root["cycle_start_dseq"] == 0
+    assert root["loop_from"] == 1 and root["version"] == 3  # the bulletin plays once, then the slate loops
     assert [(b["kind"], len(b["segments"])) for b in root["blocks"]] == [("bulletin", 4), ("slate", 2)]
+    assert summary["fresh_blocks"] == 1 and summary["fresh_seconds"] == 24.0
     # every uri in the root manifest names an uploaded key with the uploaded bytes, and only uploaded keys
     for b in root["blocks"]:
         for s in b["segments"]:
@@ -105,11 +108,11 @@ def test_second_publish_keeps_previous_bulletin_as_replay_and_is_continuous(tmp_
     # the replay is the earlier bulletin's keys, not re-uploaded; the earlier slate is not replayed
     assert all(s["uri"].startswith(first_prefix + "/") for s in root["blocks"][2]["segments"])
     assert len(s3.puts) - n_before == 3 + 1 + 2 + 1 + 1
-    # continuity: epoch unchanged, start on a loop boundary of the first cycle (N=6), prev = first without prev
+    # continuity: epoch unchanged; the first manifest's fresh region (4 segments from 1010) is long over, so the new
+    # one takes over right away at k + margin (inside the slate loop); prev = first without prev
     assert root["epoch"] == first["epoch"]
     k = channel.live_k(NOW2, first["epoch"])
-    assert root["cycle_start_k"] >= k + channel.MARGIN
-    assert (root["cycle_start_k"] - first["cycle_start_k"]) % 6 == 0
+    assert root["cycle_start_k"] == k + channel.MARGIN and root["loop_from"] == 1
     assert root["prev"] == first and "prev" not in root["prev"]
     assert root["cycle_start_dseq"] == channel.swap_dseq(first, root["cycle_start_k"])
     # nothing was overwritten or deleted
@@ -161,3 +164,87 @@ def test_next_manifest_replaces_a_pending_manifest():
                "blocks": [_block("p", 10)], "prev": A}
     m = channel.next_manifest(pending, [_block("n", 3)], channel.EPOCH + 6 * 100)
     assert m["cycle_start_k"] == 500 and m["cycle_start_dseq"] == 9 and m["prev"] == A
+
+
+# ---------- hourly runs: several bulletins per publish, fresh first ----------
+def test_multi_bulletin_publish_layout_loop_from_and_footage(tmp_path):
+    s3 = FakeS3()
+    outs = [fake_render(tmp_path / f"s{i}", n_ep=4 + i) for i in range(3)]
+    summary = publish.publish_many(outs, s3, "bkt", now=NOW1, run_ts="20261106T152300Z")
+    keys = [k for k, _, _ in s3.puts]
+    assert summary["prefix"] == "bulletins/20261106T152300Z-00" and summary["run_ts"] == "20261106T152300Z"
+    assert keys[-1] == "manifest.json" and keys.count("manifest.json") == 1
+    for b in ("bulletins/20261106T152300Z-00", "bulletins/20261106T152300Z-01", "bulletins/20261106T152300Z-02", "bulletins/20261106T152300Z-00/slate"):
+        idx = [i for i, k in enumerate(keys) if k.startswith(b + "/") and k.count("/") == b.count("/") + 1]
+        ts = [i for i in idx if keys[i].endswith(".ts")]
+        assert keys[max(idx)] == f"{b}/manifest.json" and max(ts) < max(idx), b
+    assert not any(k.startswith("bulletins/20261106T152300Z-01/slate") for k in keys)  # one slate per run
+    root = json.loads(s3.objects["manifest.json"][0])
+    assert [(b["kind"], b["id"], len(b["segments"])) for b in root["blocks"]] == [
+        ("bulletin", "20261106T152300Z-00", 4), ("bulletin", "20261106T152300Z-01", 5), ("bulletin", "20261106T152300Z-02", 6),
+        ("slate", "20261106T152300Z-00/slate", 2)]
+    assert root["loop_from"] == 3 and summary["fresh_blocks"] == 3 and summary["fresh_seconds"] == 90.0 and summary["fresh_minutes"] == 1.5
+    assert summary["objects"] == 15 + 3 + 2 + 1 + 1 and summary["segments"] == 17
+    for o in outs:
+        assert json.loads((o / "publish.json").read_text())["fresh_blocks"] == 3
+    # the Worker plays the fresh blocks once, in slice order, then slate forever
+    es = channel.eras(root)
+    names = [channel.era_segment(es[-1], k)["uri"].split("/")[1] for k in range(1010, 1010 + 17 + 4)]
+    assert names == ["20261106T152300Z-00"] * 4 + ["20261106T152300Z-01"] * 5 + ["20261106T152300Z-02"] * 6 + ["20261106T152300Z-00"] * 2 + ["20261106T152300Z-00"] * 4
+    assert channel.era_segment(es[-1], 1030)["uri"].endswith("slate/slate_001.ts") and channel.era_segment(es[-1], 1031)["uri"].endswith("slate/slate_000.ts")
+
+
+def test_next_publish_waits_for_the_fresh_region_then_keeps_last_run_as_replays(tmp_path):
+    s3 = FakeS3()
+    publish.publish_many([fake_render(tmp_path / "a0", 3), fake_render(tmp_path / "a1", 3)], s3, "bkt", now=NOW1, run_ts="A")
+    first = json.loads(s3.objects["manifest.json"][0])  # start 1010, fresh 6 segments -> fresh end 1016
+    publish.publish_many([fake_render(tmp_path / "b0", 2)], s3, "bkt", now=NOW1 + 6 * 2, run_ts="B")  # k=1002, want 1012 < 1016
+    root = json.loads(s3.objects["manifest.json"][0])
+    assert root["cycle_start_k"] == 1016 and root["prev"] == first
+    assert [(b["kind"], b["id"]) for b in root["blocks"]] == [("bulletin", "B"), ("slate", "B/slate"), ("replay", "A-00"), ("replay", "A-01")]
+    assert root["loop_from"] == 1
+    assert root["cycle_start_dseq"] == channel.swap_dseq(first, 1016) == 2  # tags at 1010 (A-00) and 1013 (A-01)
+    # replays are the old keys, nothing re-uploaded
+    assert all(s["uri"].startswith("bulletins/A-0") for b in root["blocks"][2:] for s in b["segments"])
+    assert len([k for k, _, _ in s3.puts if k.startswith("bulletins/A-")]) == 3 + 1 + 3 + 1 + 2 + 1
+
+
+def test_pending_manifest_is_replaced_but_its_fresh_blocks_are_inherited(tmp_path):
+    s3 = FakeS3()
+    publish.publish_many([fake_render(tmp_path / "p0", 4)], s3, "bkt", now=NOW1, run_ts="P")  # start 1010
+    publish.publish_many([fake_render(tmp_path / "q0", 3)], s3, "bkt", now=NOW1 - 6, run_ts="Q")  # k=999, want 1009 < 1010: P pending
+    root = json.loads(s3.objects["manifest.json"][0])
+    assert root["cycle_start_k"] == 1010 and "prev" not in root and root["cycle_start_dseq"] == 0
+    assert [(b["kind"], b["id"]) for b in root["blocks"]] == [("bulletin", "P"), ("bulletin", "Q"), ("slate", "Q/slate")]
+    assert root["loop_from"] == 2
+    assert json.loads((tmp_path / "q0" / "publish.json").read_text())["inherited_blocks"] == 1
+
+
+def test_replay_cap_is_six_blocks(tmp_path):
+    s3 = FakeS3()
+    for n in range(3):
+        publish.publish_many([fake_render(tmp_path / f"r{n}{i}", 2) for i in range(4)], s3, "bkt", now=NOW1 + 3600 * n, run_ts=f"R{n}")
+    root = json.loads(s3.objects["manifest.json"][0])
+    kinds = [b["kind"] for b in root["blocks"]]
+    assert kinds == ["bulletin"] * 4 + ["slate"] + ["replay"] * 6
+    assert [b["id"] for b in root["blocks"][5:]] == ["R1-00", "R1-01", "R1-02", "R1-03", "R0-00", "R0-01"]  # newest first
+
+
+def test_layout_rejects_an_empty_loop_region():
+    with pytest.raises(ValueError):
+        channel.layout({"loop_from": 2, "blocks": [_block("a", 1), _block("b", 1)]})
+    with pytest.raises(ValueError):
+        channel.next_manifest(None, [_block("a", 1)], NOW1, loop_from=1)
+    assert channel.layout({"loop_from": 1, "blocks": [_block("a", 3), _block("b", 1)]})[2] == 3
+
+
+def test_v3_swap_math_matches_worker_js_golden():
+    g = json.loads((Path(__file__).resolve().parents[1] / "worker" / "test" / "fixtures" / "swap-v3-golden.json").read_text())
+    ms = g["manifests"]
+    for v in g["swaps"]:
+        start = channel.next_swap_start(ms[v["cur"]], v["k"], 10)
+        assert (start, channel.swap_dseq(ms[v["cur"]], start)) == (v["start"], v["dseq"]), v
+    es = channel.eras(ms["B3"])
+    for t in g["timeline"]:
+        s = channel.segment_at(ms["B3"], t["k"])
+        assert (s["uri"], s["tag"], channel.tags_before_eras(t["k"], es)) == (t["uri"], t["tag"], t["dseq"]), t

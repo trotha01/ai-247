@@ -1,1 +1,1 @@
-{"state":"running","msg":"Survey done (PLAN, day1.yml, newsbot, Worker swap/failover, cron + topics handoffs, run timings). Designing: hourly cron, 6 parallel 10-min bulletins per run, once-then-loop manifest so fresh airs before replays."}
+{"state":"running","msg":"Implemented hourly.yml (cron 23 * * * *, plan -> 6-slice render matrix -> stitch), newsbot/hourly.py planner, publish_many with loop_from, Worker fresh-first swap math (JS + Python, 99 worker + 60 python tests green). Opening PR 1; dispatch + verification after merge."}
