@@ -95,18 +95,21 @@ at low effort, writer and checker stay on Claude Haiku 5.5.
 
 | Call | Model | Effort | Per episode (estimate) |
 |---|---|---|---|
-| writer + checker + repair (about 30 calls) | Claude Haiku 5.5 (0.10 / 0.50 USD per MTok) | low / medium | 0.005-0.012 USD measured (0.00586 on run 42229528561 with 6,000-char sources) |
-| plan (1 call) | Claude Fable 5.1 (10 / 50 USD per MTok) | low | about 0.03-0.06 USD (1-3k in, 0.3-1k out incl. thinking) |
-| discovery (1 call + up to 3 web searches at 0.01 USD each) | Claude Fable 5.1 | low | about 0.10-0.25 USD (search results are input tokens) |
+| writer + checker + repair (about 30 calls) | Claude Haiku 5.5 (0.10 / 0.50 USD per MTok) | low / medium | **0.0054 USD** measured (run 42238216216; 0.00586 on run 42229528561) |
+| plan (1 call) | Claude Fable 5.1 (10 / 50 USD per MTok) | low | **0.0238 USD** measured |
+| discovery (1 call + up to 3 web searches at 0.01 USD each) | Claude Fable 5.1 | low | **0.2929 USD** measured (3 searches; search results are input tokens) |
 
-Estimated **0.15-0.30 USD per episode**; the per-run guard `NEWSBOT_MAX_RUN_USD` is **0.75** (pre-flight worst case
-before every call; the writer runs before discovery, so a stop only drops discovery). With the 3-hourly cron that is
-**1.2-2.4 USD/day, 35-70 USD/month**, well above the earlier 10 USD monthly limit; levers in order of effect:
+Measured **0.322 USD per episode** (run 42238216216, details below); the per-run guard `NEWSBOT_MAX_RUN_USD` is **0.75**
+(pre-flight worst case before every call, web searches included; the writer runs before discovery, so a stop only
+drops discovery). Topic episodes run only when `day1-episode` is dispatched (PR #33 moved the unattended schedule to
+`hourly.yml`, whose six slices per hour run with `NEWSBOT_TOPIC_MODE=off`), so unattended spend from this stage is
+currently 0; if topic mode were put on a cadence, 8 episodes/day would be about 2.6 USD/day (77 USD/month) against the
+10 USD monthly limit, which remains the hard stop at the Anthropic console. Levers in order of effect:
 `plan_model=claude-haiku-5-5` (workflow input / `NEWSBOT_PLAN_MODEL`, `NEWSBOT_DISCOVERY_MODEL`), a slower cron,
 `NEWSBOT_DISCOVERY_SEARCHES`, `settings.discovery_enabled: false`. Measured cost by call kind is in `report.json`
 (`llm.cost_by_kind`: write / check / repair / plan / discover, `llm.web_searches`) and in the job summary.
 
-**Measured on one real run**: see "Measured run" below (filled in from the first `workflow_dispatch` of this build).
+Worst case under the guard: 0.75 USD per dispatched episode.
 
 ## Measured run
 

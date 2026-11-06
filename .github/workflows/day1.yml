@@ -1,18 +1,17 @@
 name: day1-episode
 
 # Day 1: render one 10-minute episode as 6 s HLS segments + manifest, plus the slate loop and replay pool.
-# Triggers: manual (workflow_dispatch) and a 3-hourly cron (unattended). To stop the cron without a commit, either set
-# the repo variable DAY1_CRON_ENABLED to "false" or run: gh workflow disable day1-episode -R trotha01/ai-247
+# Trigger: manual (workflow_dispatch) only. The unattended schedule moved to hourly.yml (`hourly-bulletins`, cron
+# "23 * * * *"), which renders six of these bulletins in parallel per hour so each hourly run publishes >= 60 min of
+# new footage (docs/PLAN.md "Hourly cadence"); a second cron here would only add Claude spend. A dispatched run still
+# publishes its episode to R2 as one fresh block (loop_from 1) and the Worker swaps it in without a cut.
 #
-# Scheduled runs: GitHub fires `schedule` only from this file on the default branch (main), at most every 5 minutes,
-# delayed or dropped under load, and switches the cron off after 60 days without repository activity. A cron run has
-# no `inputs`, so every `inputs.*` expression below is empty: TTS = kokoro (espeak-ng fallback), topic mode ON, the
-# Claude Haiku writer ON when the ANTHROPIC_API_KEY secret exists (extractive script otherwise), plan + discovery on
-# Claude Fable 5.1 at low effort. The per-run Claude cap (NEWSBOT_MAX_RUN_USD, 0.75 USD, repo variable overrides) is
-# a preflight guard: a call that could cross it is not made, the rest of the rundown goes extractive and
-# `budget_abort` is recorded, so the cap never fails a run. MEASURED 0.32 USD per episode (run 42238216216: discovery
-# 0.29, plan 0.02, Haiku writer 0.005), i.e. about 2.6 USD/day on this cron, ~77 USD/month (docs/TOPICS.md "Cost");
-# plan_model=claude-haiku-5-5 (or repo variable NEWSBOT_DISCOVERY_SEARCHES=1) brings it down, see TOPICS.md levers.
+# Inputs: TTS = kokoro (espeak-ng fallback); the Claude Haiku writer is ON when the ANTHROPIC_API_KEY secret exists
+# (extractive script otherwise); topic mode ON by default (docs/TOPICS.md) with plan + discovery on Claude Fable 5.1 at
+# low effort. The per-run Claude cap (NEWSBOT_MAX_RUN_USD, 0.75 USD, repo variable overrides) is a preflight guard: a
+# call that could cross it is not made, the rest of the rundown goes extractive and `budget_abort` is recorded, so the
+# cap never fails a run. MEASURED 0.32 USD per dispatched topic episode (run 42238216216: discovery 0.29, plan 0.02,
+# Haiku writer 0.005). No cron runs this workflow; hourly.yml renders its slices with NEWSBOT_TOPIC_MODE=off.
 on:
   workflow_dispatch:
     inputs:
@@ -45,33 +44,24 @@ on:
         default: "claude-fable-5-1"
         type: choice
         options: ["claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"]
-  schedule:
-    - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
-
 permissions:
   contents: read
   actions: read   # to fetch earlier episode artifacts for the replay pool (and this run's artifact in the record job)
 
 concurrency:
-  group: day1-episode
+  group: episode-publish   # shared with hourly-bulletins: both read-modify-write the root manifest.json in R2
   cancel-in-progress: false
 
 jobs:
   episode:
-    # never on forks; cron can be switched off with the DAY1_CRON_ENABLED variable
-    if: github.repository == 'trotha01/ai-247' && (github.event_name != 'schedule' || vars.DAY1_CRON_ENABLED != 'false')
+    # never on forks (no cron here any more: see hourly.yml)
+    if: github.repository == 'trotha01/ai-247'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - name: Trigger
-        # One line per run saying how it was started (schedule vs dispatch) and the state of the cron switch.
-        # DAY1_CRON_ENABLED is a repository *variable* (not a secret); the job-level `if` above skips a scheduled
-        # run only when it is exactly "false". No secrets are echoed.
-        env:
-          CRON_SWITCH: ${{ vars.DAY1_CRON_ENABLED }}
-        run: |
-          echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
-          echo "DAY1_CRON_ENABLED=${CRON_SWITCH:-<unset>}"
+        # One line per run saying how it was started. No secrets are echoed.
+        run: echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
 
       - uses: actions/checkout@v7
         with:

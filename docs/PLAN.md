@@ -171,4 +171,45 @@ Each episode now researches one topic instead of digesting the 8 feeds: `topics/
 web-searching discovery call on Claude Fable 5.1 may add topics, no daily cap), the episode history in Cloudflare D1
 (`newsbot/history_db.py`, dedupe; nothing committed), `newsbot/topics.py`, `newsbot/research.py`, `newsbot/discovery.py`. Design, settings and the first measured
 episode (run 42229528561: topic `agent-harnesses`, 8 stories from 5 sources, 0.00586 USD) are in `docs/TOPICS.md`.
-`mode=feeds` or the repo variable `DAY1_TOPIC_MODE=off` restores the digest.
+Topic episodes run on `day1-episode` dispatches (`mode=feeds` or repo variable `DAY1_TOPIC_MODE=off` restores the
+digest); the hourly cadence below renders its slices with topic mode off. Measured with Fable 5.1 plan + web-searching
+discovery: 0.32 USD per topic episode (run 42238216216, `docs/TOPICS.md`).
+
+## Hourly cadence: >= 60 min of new footage per run (2026-11-06)
+
+Trevor's rule: if the cron dispatches once an hour, each hour must produce at least an hour of new footage (produced minutes >= cadence minutes), so the channel never repeats old footage because the new footage is too short. Branch `cloud/ai247-coverage`.
+
+### Measured before the change (runs 42235237153, 42214045472, 42229528561 on `main`)
+
+| Measure | Value |
+|---|---|
+| Footage per run | 600 s (one 10-minute episode, 100 x 6 s) every 3 h on the old cron = 10 min per 180 min of cadence |
+| Render minutes per minute of footage | pipeline 376-594 s per 600 s of footage = **0.63-1.0 min per footage minute** (TTS+plan 107-211 s, render+encode 214-322 s at 57-86 fps incl. encode, script 35-41 s with Haiku, fetch 5-6 s, slate 10-15 s); 15-min bulletins would run 9-15 min, 20-min bulletins 13-20 min: fine on a fast runner, inside the 25-minute render limit only with margin on a slow one |
+| Limits | render step `timeout-minutes` 25, job 35 (GitHub max 6 h per job; the cadence, not the limit, is the binding constraint); public-repo standard runners 4 vCPU / 16 GB, up to 20 concurrent jobs |
+| R2 publish | 108 objects / 33 MB in 91-144 s **sequential** (about 1.3 s per PutObject) |
+| Claude cost | 0.0046-0.0050 USD per 10-minute Haiku episode (26-30 calls); per-process cap 0.05 USD |
+| Content supply | 110 items from 8 feeds (15 per feed, the parser's limit; Microsoft Research 10, Claude Code releases 10), 12 ranked, 10-11 aired per episode; feeds refresh slowly (a few new items per hour) |
+| Schedule | 0 `schedule` runs ever for `day1-episode` (cron `23 */3`); manual runs work (cron worker, PRs #25 and #30) |
+
+### Design chosen: six 10-minute bulletins per hour, rendered in parallel, aired fresh-first
+
+Cheapest path that meets the rule with the tested 10-minute unit (test suite, 600 s target, 25-minute limit) and no new infrastructure:
+
+- **`hourly-bulletins` workflow** (`.github/workflows/hourly.yml`, cron `23 * * * *`): job `plan` fetches every working candidate feed once (`newsbot/hourly.py`), pushes stories that already aired to the back (aired-URL memory = `sources` of the newest 150 `bulletins/<id>/manifest.json` in R2), de-duplicates, and deals 14 stories per slice (at most 4 per source) into up to 6 slices; job `render` is a matrix of one 10-minute bulletin per slice (`newsbot.day1 --items-json`, unchanged pipeline, 6 jobs in parallel, each 6-15 min); job `stitch` publishes all rendered bulletins in slice order as the fresh blocks of one root manifest (`newsbot.publish --run-ts`, uploads 12 in parallel) and writes the footage minutes, cost and novelty to the job summary. A failed slice does not stop the others (`fail-fast: false`, stitch runs `if: always()`); fewer than 60 minutes is a `::warning::`, not a red run. The `day1-episode` cron was removed (dispatch only): a second cron would only add spend.
+- **Worker: fresh footage first** (`loop_from` in `manifest.json`, docs/MANIFEST-SWAP.md): the fresh blocks play exactly once from `cycle_start_k`, then slate + the previous hour's six bulletins loop until the next publish. The swap rule became block-granular: a new manifest starts at the end of the old fresh region if that is still ahead (nothing fresh is cut), otherwise at `k + margin` inside the replay loop (tagged, continuous); a pending manifest's fresh blocks are inherited instead of dropped. Legacy manifests keep the loop-boundary rule. Same math in `worker/src/playlist.js` and `newsbot/channel.py`, cross-checked on generated vectors (`worker/test/fixtures/swap-v3-golden.json`); hls-parser simulations in `worker/test/unit/swap.test.js` show every fresh segment of on-time runs airs once, in order, with monotonic sequences and stable URIs, and that a late run plays replays only for the gap.
+- **Cost guard**: only the first `HOURLY_LLM_SLICES` bulletins per run (repo variable, default 1) use Claude Haiku; the others are extractive (0 USD). The 0.05 USD per-process cap is unchanged.
+
+| Setting | Claude spend | GitHub |
+|---|---|---|
+| default, 1 Haiku slice of 6 | 24 x 0.005 = **0.12 USD/day, ~3.6 USD/month** (inside the 10 USD monthly limit) | 24 runs x (plan 2 min + 6 x ~12 min + stitch 5 min) = ~80 job-minutes/hour, free for a public repo; 6 concurrent jobs of the 20 allowed |
+| 2 Haiku slices | 0.24 USD/day, ~7.2 USD/month | same |
+| all 6 Haiku | 0.72 USD/day, ~22 USD/month: **needs Trevor to raise the cap** | same |
+| PR #29 topic stage (Fable plan + web-search discovery) per slice | 0.15-0.30 USD per bulletin: not enabled on the hourly path (`NEWSBOT_TOPIC_MODE=off`); 1 topic slice per hour would be 3.6-7.2 USD/day | |
+
+### Honest limit: new footage, not always new stories
+
+The 8-14 feeds supply about 110-200 items (now up to 60 arXiv items per fetch) and refresh by a few items per hour, while 60 minutes of bulletins need about 60-70 stories (Haiku, 3-5 sentences each) or more (extractive). The planner therefore spends the never-aired stories first, spread over the hour's slices, and fills the rest with the stories aired longest ago, re-narrated and re-rendered; the job summary counts `never aired` per slice. Genuinely new content per hour needs more source text (PR #29's research stage reads primary pages; more feeds), which is outside this item.
+
+### Verification run
+
+_Filled in after the first `workflow_dispatch` of `hourly-bulletins` on `main` (the workflow must be on the default branch before it can be dispatched)._

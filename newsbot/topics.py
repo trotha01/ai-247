@@ -362,7 +362,8 @@ def research_stage(items, reports, now, client, meter, ep: Path, log=print) -> d
             cand = rank.rank(titems, MAX_STORIES, now, per_source=MAX_STORIES)
         if not offline:
             used = sum(1 for r in info["web"]["leads"] if "seconds" in r)
-            cand, info["fetches"] = research.enrich(cand, max_fetch=max(0, MAX_FETCH - used), max_chars=SOURCE_CHARS, log=log)
+            already = {r["url"] for r in info["web"]["leads"] if r.get("fetched")}   # leads were read in deepen(): do not fetch them twice
+            cand, info["fetches"] = research.enrich(cand, max_fetch=max(0, MAX_FETCH - used), max_chars=SOURCE_CHARS, log=log, skip_urls=already)
         order, intro = cand, None
         if client is not None:
             try:
@@ -469,7 +470,7 @@ def record(out: Path, run_id: str | None = None, now: float | None = None) -> di
     # Mirror to R2 only when this run actually read the mirror (or D1 gave the full history): a transient R2 read
     # failure must never overwrite the mirror with a history that lacks the earlier entries (review finding).
     if r2.r2_configured():
-        if HISTORY_STATUS.get("r2_read_ok") or result["d1_written"]:
+        if HISTORY_STATUS.get("r2_read_ok"):          # a D1 write does not make the mirror safe to replace: the mirror may hold entries D1 lacks
             try:
                 history_to_r2(h)
                 result["r2_mirror"] = True

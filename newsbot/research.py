@@ -98,7 +98,7 @@ def fetch_page(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_BYTES) -
     return (page if "text/plain" in ctype else extract_text(page)), ""
 
 
-def enrich(items, max_fetch: int = MAX_FETCH, max_chars: int = MAX_CHARS, fetch=fetch_page, log=print):
+def enrich(items, max_fetch: int = MAX_FETCH, max_chars: int = MAX_CHARS, fetch=fetch_page, log=print, skip_urls=()):
     """Replace short feed summaries with primary-page text for the first max_fetch items (rank order).
 
     Returns (new_items, report). Items are copies; an item whose page gives no gain keeps its feed summary.
@@ -107,7 +107,9 @@ def enrich(items, max_fetch: int = MAX_FETCH, max_chars: int = MAX_CHARS, fetch=
     out, report, fetched = [], [], 0
     for it in items:
         rec = {"source": it.source, "url": it.url, "fetched": False, "chars_before": len(it.summary or ""), "chars_after": len(it.summary or ""), "note": ""}
-        if fetched < max_fetch and it.url.startswith("http"):
+        if it.url in skip_urls:
+            rec["note"] = "already read this run"
+        elif fetched < max_fetch and it.url.startswith("http"):
             t0 = time.time()
             text, note = fetch(it.url)
             fetched += 1

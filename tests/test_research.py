@@ -85,6 +85,8 @@ def test_enrich_respects_fetch_budget_and_min_gain():
     out, rep = research.enrich(items, max_fetch=2, max_chars=800, fetch=lambda u: (long_page, ""), log=lambda *a: None)
     assert [r["fetched"] for r in rep] == [True, True, False, False]
     assert rep[2]["note"] == "fetch budget used"
+    _, rep3 = research.enrich(items[:2], fetch=lambda u: (long_page, ""), log=lambda *a: None, skip_urls={items[0].url})
+    assert [r["note"] for r in rep3] == ["already read this run", ""] and [r["fetched"] for r in rep3] == [False, True]
     assert len(out[0].summary) <= 800
     # a page that adds under MIN_GAIN_CHARS keeps the feed summary
     out2, rep2 = research.enrich([item(summary="a" * 100)], fetch=lambda u: ("b" * 200, ""), log=lambda *a: None)
