@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #8 merged (Part A done). day1 llm=off run 42212912268 published 108 objects (34.1 MB) to R2, root manifest.json last; llm=on run 42214045472 running (dispatch 2 of 2); PLAN.md note drafted"}
+{"state":"running","msg":"Both day1 runs published to R2 (42212912268 llm=off: 108 objects 34.1 MB; 42214045472 llm=on: 108 objects 33.5 MB, chained onto run 1 at cycle_start_k 161231). Docs PR with the PLAN.md note opening; done after it merges"}
