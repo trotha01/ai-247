@@ -49,8 +49,8 @@ def enabled() -> bool:
 
 
 # ---------------------------------------------------------------- files
-def load_topics(path: Path = TOPICS_PATH) -> dict:
-    cfg = json.loads(Path(path).read_text())
+def load_topics(path: Path | None = None) -> dict:
+    cfg = json.loads(Path(path or TOPICS_PATH).read_text())   # resolved at call time (tests monkeypatch TOPICS_PATH)
     cfg.setdefault("settings", {})
     for k, v in DEFAULTS.items():          # settings live under "settings" (discovery.py reads them there) and are
         cfg["settings"].setdefault(k, v)   # mirrored to the top level for the scoring code
@@ -79,7 +79,8 @@ def load_topics(path: Path = TOPICS_PATH) -> dict:
     return cfg
 
 
-def save_topics(cfg: dict, path: Path = TOPICS_PATH) -> None:
+def save_topics(cfg: dict, path: Path | None = None) -> None:
+    path = path or TOPICS_PATH
     doc = {k: v for k, v in cfg.items() if k not in DEFAULTS and k != "from_d1"}   # the mirrored settings are not written twice
     doc["topics"] = [{k: v for k, v in t.items() if not k.startswith("_")} for t in cfg["topics"]]
     Path(path).write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
