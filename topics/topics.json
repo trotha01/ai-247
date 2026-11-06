@@ -1,0 +1,190 @@
+{
+  "note": "Topic list for the research stage (docs/TOPICS.md). Edit freely. keywords: lower-case phrases matched against feed item title+summary. sources: extra feeds / GitHub release repos fetched only for this topic. queries: web search strings for the keyless arXiv/GitHub/HN lookups (newsbot/research.py). seed_urls: primary links a discovery call found (read and cited like any source). The discovery lane (web search, Claude Fable 5.1) appends topics with lane 'discovered', no daily cap; delete or set enabled=false to drop one. settings: repeat_after_episodes (N), min_new_items_to_repeat, min_items, discovery_enabled, lane_weights. The episode history is in Cloudflare D1, not in this repo.",
+  "version": 1,
+  "settings": {
+    "repeat_after_episodes": 6,
+    "min_new_items_to_repeat": 3,
+    "min_items": 5,
+    "lane_weights": {
+      "seed": 1.0,
+      "discovered": 0.9
+    },
+    "discovery_enabled": true
+  },
+  "topics": [
+    {
+      "id": "agent-harnesses",
+      "name": "AI agent harnesses and coding agents",
+      "lane": "seed",
+      "enabled": true,
+      "added": "2026-11-06",
+      "reason": "seed lane (Trevor)",
+      "keywords": [
+        "agent",
+        "agents",
+        "agentic",
+        "coding agent",
+        "claude code",
+        "codex",
+        "gemini cli",
+        "copilot",
+        "cursor",
+        "mcp",
+        "model context protocol",
+        "tool use",
+        "tool calling",
+        "harness",
+        "openhands",
+        "cline",
+        "swe-bench",
+        "computer use",
+        "agent sdk",
+        "subagent",
+        "multi-agent"
+      ],
+      "sources": [
+        {
+          "name": "OpenAI Codex releases",
+          "kind": "github",
+          "repo": "openai/codex"
+        },
+        {
+          "name": "Gemini CLI releases",
+          "kind": "github",
+          "repo": "google-gemini/gemini-cli"
+        },
+        {
+          "name": "OpenHands releases",
+          "kind": "github",
+          "repo": "All-Hands-AI/OpenHands"
+        },
+        {
+          "name": "Cline releases",
+          "kind": "github",
+          "repo": "cline/cline"
+        },
+        {
+          "name": "Claude Agent SDK (Python) releases",
+          "kind": "github",
+          "repo": "anthropics/claude-agent-sdk-python"
+        }
+      ],
+      "description": "Harnesses, SDKs, CLIs and IDE agents that let models plan, call tools and write code.",
+      "queries": [
+        "coding agent harness",
+        "AI agent framework",
+        "Claude Code OR Codex OR Gemini CLI"
+      ],
+      "seed_urls": []
+    },
+    {
+      "id": "ai-vfx",
+      "name": "AI for VFX and film and video production",
+      "lane": "seed",
+      "enabled": true,
+      "added": "2026-11-06",
+      "reason": "seed lane (Trevor)",
+      "keywords": [
+        "vfx",
+        "visual effects",
+        "film",
+        "filmmaking",
+        "video generation",
+        "text-to-video",
+        "image-to-video",
+        "video model",
+        "video diffusion",
+        "rendering",
+        "animation",
+        "compositing",
+        "3d",
+        "nerf",
+        "gaussian splatting",
+        "motion capture",
+        "comfyui",
+        "blender",
+        "sora",
+        "veo",
+        "runway",
+        "world model",
+        "cinema",
+        "camera control",
+        "rotoscoping",
+        "keying",
+        "upscaling"
+      ],
+      "sources": [
+        {
+          "name": "fxguide",
+          "kind": "feed",
+          "url": "https://www.fxguide.com/feed/"
+        },
+        {
+          "name": "befores & afters",
+          "kind": "feed",
+          "url": "https://beforesandafters.com/feed/"
+        },
+        {
+          "name": "Blender",
+          "kind": "feed",
+          "url": "https://www.blender.org/feed/"
+        },
+        {
+          "name": "arXiv cs.GR",
+          "kind": "feed",
+          "url": "https://rss.arxiv.org/rss/cs.GR"
+        },
+        {
+          "name": "ComfyUI releases",
+          "kind": "github",
+          "repo": "comfyanonymous/ComfyUI"
+        }
+      ],
+      "description": "Generative video, AI compositing, 3D and rendering tools used in film, VFX and video production.",
+      "queries": [
+        "AI visual effects",
+        "video generation model",
+        "generative AI film production"
+      ],
+      "seed_urls": []
+    },
+    {
+      "id": "verified-code-generation",
+      "name": "Formally verified AI code generation",
+      "lane": "discovered",
+      "description": "A wave of techniques, benchmarks and tools that have LLM agents produce machine-checkable proofs (Dafny, Lean, Verus) alongside the code they write, so correctness is verified rather than merely tested.",
+      "keywords": [
+        "formal verification",
+        "formally verified",
+        "vericoding",
+        "dafny",
+        "lean",
+        "proof",
+        "formalization",
+        "verified code",
+        "program synthesis",
+        "specification",
+        "theorem proving",
+        "verus",
+        "pdd kit"
+      ],
+      "queries": [
+        "LLM formally verified code generation Dafny",
+        "vericoding benchmark agents",
+        "agent proof formalization Lean verification"
+      ],
+      "sources": [],
+      "seed_urls": [
+        "https://arxiv.org/abs/2611.07073",
+        "https://arxiv.org/html/2611.05590",
+        "https://arxiv.org/html/2608.21516v1",
+        "https://arxiv.org/pdf/2608.13522",
+        "https://arxiv.org/pdf/2509.22908",
+        "https://arxiv.org/pdf/2606.06523"
+      ],
+      "enabled": true,
+      "added": "2026-11-06",
+      "reason": "Three feed items today (PDD Kit, LLM-to-Dafny, proof formalization) plus 5+ recent arXiv papers on verified code synthesis benchmarks. (12 matching items/links on 2026-11-06)"
+    }
+  ]
+}

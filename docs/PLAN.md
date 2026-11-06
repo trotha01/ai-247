@@ -165,6 +165,16 @@ Before this, `/healthz` on `ai247-live` reported `pool.problem: "missing: pool/m
 
 Kept running without a human (`docs/FAILOVER.md`, "Schedule and refresh guard"): `replay-pool` now also runs daily at 04:41 UTC and refreshes the pool from the two newest complete episodes; `newsbot/replay_pool.py` refuses to replace a good pool with an empty one, writes nothing when no complete episode exists, and skips the PutObject when the pool already lists the newest episodes. `worker/wrangler.toml` `MAX_MANIFEST_AGE_S` went from `0` to `14400`, so a live `manifest.json` older than 4 h (one missed 3-hourly `day1-episode` run plus slack) fails over to the pool and returns when a fresh manifest lands.
 
+## Topic research stage (2026-11-06)
+
+Each episode now researches one topic instead of digesting the 8 feeds: `topics/topics.json` (editable lanes; a
+web-searching discovery call on Claude Fable 5.1 may add topics, no daily cap), the episode history in Cloudflare D1
+(`newsbot/history_db.py`, dedupe; nothing committed), `newsbot/topics.py`, `newsbot/research.py`, `newsbot/discovery.py`. Design, settings and the first measured
+episode (run 42229528561: topic `agent-harnesses`, 8 stories from 5 sources, 0.00586 USD) are in `docs/TOPICS.md`.
+Topic episodes run on `day1-episode` dispatches (`mode=feeds` or repo variable `DAY1_TOPIC_MODE=off` restores the
+digest); the hourly cadence below renders its slices with topic mode off. Measured with Fable 5.1 plan + web-searching
+discovery: 0.32 USD per topic episode (run 42238216216, `docs/TOPICS.md`).
+
 ## Hourly cadence: >= 60 min of new footage per run (2026-11-06)
 
 Trevor's rule: if the cron dispatches once an hour, each hour must produce at least an hour of new footage (produced minutes >= cadence minutes), so the channel never repeats old footage because the new footage is too short. Branch `cloud/ai247-coverage`.

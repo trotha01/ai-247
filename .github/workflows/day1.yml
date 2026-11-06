@@ -6,10 +6,12 @@ name: day1-episode
 # new footage (docs/PLAN.md "Hourly cadence"); a second cron here would only add Claude spend. A dispatched run still
 # publishes its episode to R2 as one fresh block (loop_from 1) and the Worker swaps it in without a cut.
 #
-# Inputs: TTS = kokoro (espeak-ng fallback) and the Claude Haiku writer is ON when the ANTHROPIC_API_KEY secret exists
-# (extractive script otherwise). The per-run Claude cap (NEWSBOT_MAX_RUN_USD, 0.05 USD) is a preflight guard: a call
-# that could cross it is not made, the rest of the rundown goes extractive and `budget_abort` is recorded, so the cap
-# never fails a run.
+# Inputs: TTS = kokoro (espeak-ng fallback); the Claude Haiku writer is ON when the ANTHROPIC_API_KEY secret exists
+# (extractive script otherwise); topic mode ON by default (docs/TOPICS.md) with plan + discovery on Claude Fable 5.1 at
+# low effort. The per-run Claude cap (NEWSBOT_MAX_RUN_USD, 0.75 USD, repo variable overrides) is a preflight guard: a
+# call that could cross it is not made, the rest of the rundown goes extractive and `budget_abort` is recorded, so the
+# cap never fails a run. MEASURED 0.32 USD per dispatched topic episode (run 42238216216: discovery 0.29, plan 0.02,
+# Haiku writer 0.005). No cron runs this workflow; hourly.yml renders its slices with NEWSBOT_TOPIC_MODE=off.
 on:
   workflow_dispatch:
     inputs:
@@ -25,9 +27,26 @@ on:
         default: "on"
         type: choice
         options: ["on", "off"]
+      mode:
+        description: "topic = research one topic (docs/TOPICS.md); feeds = the old general digest"
+        required: false
+        default: "topic"
+        type: choice
+        options: ["topic", "feeds"]
+      topic:
+        description: "Force a topic id from topics/topics.json (blank = best freshness x novelty score)"
+        required: false
+        default: ""
+        type: string
+      plan_model:
+        description: "Model for the topic plan and discovery calls, low effort (writer/checker stay on Haiku 5.5)"
+        required: false
+        default: "claude-fable-5-1"
+        type: choice
+        options: ["claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"]
 permissions:
   contents: read
-  actions: read   # only to fetch earlier episode artifacts for the replay pool
+  actions: read   # to fetch earlier episode artifacts for the replay pool (and this run's artifact in the record job)
 
 concurrency:
   group: episode-publish   # shared with hourly-bulletins: both read-modify-write the root manifest.json in R2
@@ -45,6 +64,8 @@ jobs:
         run: echo "event=${{ github.event_name }} ref=${{ github.ref_name }} sha=${{ github.sha }} run=${{ github.run_id }} attempt=${{ github.run_attempt }}"
 
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false   # the write token is used only by the record step below, never left in .git/config
 
       - uses: actions/setup-python@v7
         with:
@@ -91,6 +112,20 @@ jobs:
           done
           ls replays || true
 
+      - name: "Load episode history (read-only: D1, R2 mirror, D1 discovered topics) into a hand-off file"
+        # The only render-job step that sees Cloudflare/R2 credentials. It writes out1/history_in.json, which the
+        # render step reads, so the step that parses third-party pages and model output holds no secrets but the
+        # Claude key (docs/TOPICS.md "Persistence"). Best effort: without secrets the file says backend none.
+        timeout-minutes: 3
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m newsbot.topics load out1/history_in.json
+
       - name: Render episode (hard limit 25 minutes)
         timeout-minutes: 25
         env:
@@ -98,6 +133,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEWSBOT_NO_LLM: ${{ inputs.llm == 'off' && '1' || '' }}
+          # Topic research stage (docs/TOPICS.md). Cron: topic mode unless the repo variable DAY1_TOPIC_MODE is "off".
+          NEWSBOT_TOPIC_MODE: ${{ (inputs.mode == 'feeds' || vars.DAY1_TOPIC_MODE == 'off') && 'off' || 'on' }}
+          NEWSBOT_TOPIC: ${{ inputs.topic }}
+          # Plan + discovery (web search) on Claude Fable 5.1 at low effort by default (docs/TOPICS.md "Cost").
+          NEWSBOT_PLAN_MODEL: ${{ inputs.plan_model || 'claude-fable-5-1' }}
+          NEWSBOT_DISCOVERY_MODEL: ${{ inputs.plan_model || 'claude-fable-5-1' }}
+          NEWSBOT_MAX_RUN_USD: ${{ vars.NEWSBOT_MAX_RUN_USD || '0.75' }}
+          # Episode history comes from the hand-off file written by the step above: no Cloudflare/R2 secrets here.
+          NEWSBOT_HISTORY_IN: out1/history_in.json
         run: |
           start=$SECONDS
           replay=""
@@ -110,7 +154,7 @@ jobs:
         run: cat out1/report.json | head -c 6000 || true
 
       - name: Tests (Day 1 units + seam on the real render)
-        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py
+        run: NEWSBOT_DAY1_OUT=out1 python -m pytest -v -s tests/test_day1_units.py tests/test_seam.py tests/test_day1_output.py tests/test_units.py tests/test_publish.py tests/test_topics.py tests/test_research.py tests/test_history_db.py
 
       - name: Publish to R2 (segments first, root manifest.json last; skipped without the R2 secrets)
         # Only after the render passed its tests. Layout: docs/R2_LAYOUT.md (B) + docs/MANIFEST-SWAP.md.
@@ -123,6 +167,20 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m newsbot.publish out1
 
+      - name: Verify live playback (site/test/e2e-live.js; skipped when nothing was published)
+        # Proof that https://ai-247.pages.dev plays right now, from the runner (the cloud sandbox is not always able to
+        # reach pages.dev). The new bulletin airs at the next cycle boundary, so its presence is reported, not required.
+        # continue-on-error so a flaky browser check never discards a rendered episode; the result is printed in the
+        # job summary (out1/live_check.txt) and a FAIL line there is the signal to look at.
+        if: hashFiles('out1/publish.json') != ''
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          prefix=$(python -c "import json;print(json.load(open('out1/publish.json'))['prefix'])")
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw" && npm init -y >/dev/null && npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+          cd "$GITHUB_WORKSPACE" && NODE_PATH="$RUNNER_TEMP/pw/node_modules" node site/test/e2e-live.js --expect-prefix "$prefix" --wait-sec 0 | tee out1/live_check.txt
+
       - name: Job summary
         if: always()
         run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
@@ -133,3 +191,66 @@ jobs:
           name: episode-day1
           path: out1/
           retention-days: 14
+
+  record:
+    # The only job with a write-capable token (docs/TOPICS.md "Persistence"): writes the episode to D1 (R2 mirror as
+    # read cache) and commits a discovered topic back to topics/topics.json when the branch allows the push. It works
+    # from this run's uploaded artifact, so the render job never holds a write token next to third-party page text.
+    needs: episode
+    if: always() && needs.episode.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false   # the write token is used only by the push command below, never left in .git/config
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (record needs only the feed/R2 client libraries)
+        timeout-minutes: 5
+        run: timeout 240 pip install --timeout 60 --retries 3 feedparser boto3 pysbd
+      - name: Download this run's episode artifact (script, report, topic_pick, publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n episode-day1 -D out1
+          ls out1 out1/episode | head -30
+      - name: Record the episode in D1 (history) and apply a discovered topic to topics.json
+        # Dedupe memory for the next run (docs/TOPICS.md "Persistence"): the episode goes to Cloudflare D1 through the
+        # REST API (R2 mirror episodes/history.json kept as a read cache); nothing about history is committed. A topic
+        # the discovery lane added is written to D1 (discovered_topics) and appended to topics/topics.json for the
+        # commit step below (Trevor's editable list). A push by GITHUB_TOKEN triggers no other workflow. Never force-pushes.
+        timeout-minutes: 5
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python -m newsbot.topics record out1
+
+      - name: Commit a discovered topic back to topics.json (only this step sees the write token)
+        timeout-minutes: 3
+        env:
+          GH_PUSH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add topics/topics.json
+          if git diff --cached --quiet; then echo "no new topic discovered: nothing to commit"; exit 0; fi
+          added=$(python -c "import json;print((json.load(open('out1/episode/topic_pick.json')).get('discovery') or {}).get('entry', {}).get('id') or 'topic')")
+          git commit -q -m "topics: discovery added ${added} (run ${GITHUB_RUN_ID}) [skip ci]"
+          remote="https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"   # token only on this step's commands
+          for attempt in 1 2 3; do
+            if git pull -q --rebase "$remote" "$GITHUB_REF_NAME" && git push -q "$remote" "HEAD:$GITHUB_REF_NAME"; then
+              echo "topics.json pushed to $GITHUB_REF_NAME"; exit 0
+            fi
+            git rebase --abort 2>/dev/null || true   # a conflicted rebase must not poison the next attempt
+            echo "push attempt $attempt failed; retrying in 10 s"; sleep 10
+          done
+          echo "::warning::topics.json push refused (expected on main: the ruleset requires PRs); the new topic is in D1 (discovered_topics) and in the artifact (out1/episode/topic_pick.json)"

@@ -74,7 +74,7 @@ def synth_scene(sc, tts, work: Path, cache: dict):
 def build_episode(script: dict, tts, work: Path, target: float = TARGET, max_stories: int = 12):
     """Select stories to fit `target`, synthesise, fix up with real TTS durations, pad to exactly target."""
     stories = script["stories"]
-    intro = {"kind": "rundown", "title": "In this episode", "items": [], "claims": [], "headline": "",
+    intro = {"kind": "rundown", "title": script.get("rundown_title") or "In this episode", "items": [], "claims": [], "headline": "",
              "citation": {"source": "", "url": "", "published": ""}, "narration": script["intro"]}
     outro = {"kind": "outro", "title": "End of episode", "subtitle": "AI-generated. Every sentence cites its source.",
              "claims": [], "headline": "", "citation": {"source": "", "url": "", "published": ""}, "narration": script["outro"]}

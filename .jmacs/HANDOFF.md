@@ -1,18 +1,29 @@
 # Handoff
 
 ## Objective
-AI-247: hourly cadence with >= 60 min of new footage per run (Trevor's rule: produced minutes >= cadence minutes), playlist prefers fresh bulletins and falls back to replays only when fresh footage is exhausted. Branch `cloud/ai247-coverage`.
+AI-247 topic research stage (docs/TOPICS.md), approved by Trevor 2026-11-06 with four changes (web-searching
+discovery, no daily cap, history in Cloudflare D1, Fable 5.1 low effort for plan + discovery; Haiku 5.5 writer/checker).
+Branch `cloud/ai247-topics`, PR #29. Done = episode plays on https://ai-247.pages.dev, measured cost in TOPICS.md,
+PR merged (ci + worker-site-e2e + claude-review required by the main ruleset).
 
 ## Done
-- Survey: docs/PLAN.md, day1.yml, newsbot/, Worker (playlist.js / failover.js / channel.js), docs/MANIFEST-SWAP.md, FAILOVER.md, R2_LAYOUT.md, the cron worker's HANDOFF (cloud/ai247-cron: PRs #25 and #30 merged; 0 schedule runs ever; waiting for the 15:23Z slot) and the topics worker's HANDOFF + docs/TOPICS.md (cloud/ai247-topics, PR #29 open: rewrites day1.yml, day1.py, llm.py, wrangler.toml, test_day1_output.py; avoid those files).
-- Measured from runs 42235237153 / 42214045472 / 42229528561: one 10-min episode (100 x 6 s) renders in 376-594 s pipeline (TTS+plan 190-210 s, render+encode 280-320 s, ~1x real time), whole job 10-15 min; render step limit 25 min; job limit 35 min (GitHub max 6 h); R2 publish of 108 objects 91-144 s sequential.
-
-- Implemented on this branch: `.github/workflows/hourly.yml` (cron `23 * * * *`; plan -> render matrix of 6 x 10-min bulletins -> stitch/publish, HOURLY_LLM_SLICES default 1, HOURLY_CRON_ENABLED switch), `newsbot/hourly.py` (aired-URL memory from R2 per-bulletin manifests, dedupe, never-aired first, dealing with per-source caps, shortfall handling, job summary), `newsbot/publish.py publish_many` (bulletins/<ts>-NN/, 12 parallel uploads, loop_from, pending-manifest inheritance, 6 replays), `newsbot/channel.py` + `worker/src/playlist.js`/`failover.js` (`loop_from`: fresh once then loop; swap at end of fresh region else k+margin; legacy unchanged), `rank.py` NEWSBOT_PER_SOURCE_CAP, `feeds.py` arXiv limit 60, day1.yml cron removed (dispatch only). Tests: 99 Worker (unit + wrangler dev + layout e2e), 60+ Python incl. JS golden vectors. Docs: PLAN.md "Hourly cadence" (measurements, cost table, honest supply limit), MANIFEST-SWAP.md, R2_LAYOUT.md, FAILOVER.md.
+- All four changes implemented and unit-tested (99 Python + 73 Worker tests): newsbot/discovery.py (Fable + web_search),
+  newsbot/history_db.py (D1 via REST), topics.py/day1.py wiring, llm.py pricing + cap 0.75, Worker D1 binding +
+  /history.json, deploy.yml D1 step, day1.yml secrets/inputs, docs. Sibling session's two review rounds folded in; it
+  has stopped (its side branch cloud/ai247-topics-fixes is folded in; deleting it is blocked from here by the proxy).
+- Verification episode run 42238216216 green end to end: topic agent-harnesses, 9 stories, 100% supported, published
+  bulletins/20261106T150835Z, discovery added `verified-code-generation` (committed 5f23967). Measured cost 0.32213 USD
+  (discovery 0.293, plan 0.024, Haiku writer 0.005). Table in docs/TOPICS.md "Measured run".
+- D1: the current CLOUDFLARE_API_TOKEN lacks D1 permission ("Authentication error"); the R2 mirror fallback worked.
+- Review finding fixed: the R2 mirror is only rewritten when its read succeeded (test added).
 
 ## Pending
-- PR 1 (this branch) -> ci + worker-site-e2e + claude-review -> squash-merge.
-- After merge: `workflow_dispatch` hourly-bulletins on main; verify >= 60 min fresh in publish.json, `/healthz` manifest.uploaded, pages.dev plays; PR 2 with the "Verification run" numbers in PLAN.md.
-- Cron proof: the first `23 * * * *` slot after merge (no schedule run has ever been observed on this repo; the cron worker's HANDOFF concluded nothing in the repo blocks it).
+- Trevor: add **Account -> D1 -> Edit** to CLOUDFLARE_API_TOKEN (then the next run creates `ai247-history`, imports the
+  R2 mirror, and deploy.yml binds it to the Worker). Decide on spend: 0.32 USD/episode = ~2.6 USD/day on the 3-hourly
+  cron (77 USD/month) vs the 10 USD monthly limit; levers in TOPICS.md "Cost".
+- Playback proof of the new bulletin from the sandbox (airs at media sequence 163171, ~15:33Z); ci + claude-review on
+  the final head (the review sees a diff truncated at 150 KB, PR is 180 KB: one of its two blocking findings is that
+  artifact); merge PR #29; final status.
 
 ## Next step
-PR #33 is open; wait for ci + worker-site-e2e + claude-review, squash-merge, dispatch hourly-bulletins on main, verify, PR 2.
+Commit/push these fixes, confirm playback of bulletins/20261106T150835Z, get checks green, merge, set status done.
