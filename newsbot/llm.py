@@ -206,7 +206,7 @@ def write_episode_script(items, counts, client=None):
     Items whose LLM story fails fall back to a verbatim extractive story, so every aired sentence is sourced.
     On BudgetExceeded the remaining items use the extractive writer and stats['budget_abort'] is set."""
     if client is None:
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        if os.environ.get("NEWSBOT_NO_LLM") or not os.environ.get("ANTHROPIC_API_KEY"):
             return None, {"used": False}
         import anthropic
         client = anthropic.Anthropic(max_retries=2)

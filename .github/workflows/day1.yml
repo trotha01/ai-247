@@ -12,6 +12,12 @@ on:
         default: ""
         type: choice
         options: ["", "kokoro", "espeak-ng"]
+      llm:
+        description: "Claude Haiku script + fact check (needs the ANTHROPIC_API_KEY secret); off = extractive script"
+        required: false
+        default: "on"
+        type: choice
+        options: ["on", "off"]
   schedule:
     - cron: "23 */3 * * *"   # off the top of the hour: GitHub delays/drops scheduled runs under load at :00
 
@@ -72,6 +78,7 @@ jobs:
           # Secret is empty when unset; it is read by the SDK from the environment and never echoed.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEWSBOT_NO_LLM: ${{ inputs.llm == 'off' && '1' || '' }}
         run: |
           start=$SECONDS
           replay=""
