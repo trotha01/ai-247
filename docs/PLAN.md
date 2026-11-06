@@ -44,3 +44,20 @@ Public repo. Never commit keys, tokens, stream keys, account IDs or private note
 ## Reality log
 
 (Filled in from the first Actions run; see bottom of file.)
+
+## Open-source survey (Day 0 search, what was used and why)
+
+| Piece | Decision | Why |
+|---|---|---|
+| feedparser 6 | used | Maintained, handles RSS/Atom quirks; GitHub releases use the REST API (JSON) instead. |
+| skia-python | used | Installs from a wheel (v144.1); needs `libegl1 libgl1 libfontconfig1` on Ubuntu; ~59 fps draw+readback on 4 vCPU. Pillow not needed. |
+| Kokoro-82M via kokoro-onnx | used | `kokoro-onnx` runs the int8 ONNX model on CPU. Model files come from the kokoro-onnx GitHub release (huggingface.co is blocked from the cloud-session network, GitHub releases are not). The reference `kokoro`+`misaki` package pulls PyTorch and the weights from Hugging Face, so it was not used. |
+| espeak-ng | fallback TTS | apt package, robotic but dependable. Piper was not needed. |
+| ffmpeg HLS muxer | used | `-f hls` with forced 2 s keyframes and `independent_segments` cuts the single encode on closed-GOP boundaries. No other muxer library required. |
+| hls.js | later (Day 3) | Standard player; not needed until the Pages site. |
+| m3u8 (PyPI) | not used | Apple `mediastreamvalidator` is unavailable; a ~60-line checker in `newsbot/playlist.py` covers target duration, media sequence, discontinuity tags and cross-fetch continuity, and is tested. ffprobe validates the media itself. |
+
+## Notes on Day 0 choices
+
+- Segment duration is defined as the video-stream duration (equals EXTINF, 6.000 s). The audio stream inside a single `.ts` and the container span differ by a few AAC frames because the HLS muxer interleaves audio across the cut; concatenated, video is 60.000 s and audio is ~59.9 s. Tests allow container span +/-0.10 s, audio +/-0.35 s per segment, and 60 s +/-0.3 s overall.
+- Sandbox network note: from the cloud session only PyPI, anthropic.com and GitHub release downloads were reachable, so feeds could not be verified there. Feed robots.txt/availability is therefore checked at run time on the Actions runner and reported per feed (see the job summary).
