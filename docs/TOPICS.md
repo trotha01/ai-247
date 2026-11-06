@@ -28,20 +28,25 @@ Haiku writer + fact check (unchanged) -> episode -> R2.
    A topic with fewer than `min_items` (5) uncovered items is not pickable (the workflow input `topic` forces one
    anyway). If nothing is pickable the run falls back to today's general rundown minus covered URLs
    (`topic: null`, reported as `feeds` mode), so the channel never goes dark.
-3. **Research**: the topic's items are ranked with `rank.py` (per-source cap 4, lifted when the topic lives on one
-   or two sources), then for the top items the primary source (article page, arXiv abstract; GitHub release
-   bodies are already primary) is fetched politely (robots.txt, the newsbot UA, 20 s timeout, 1 MB cap, 8 fetches
-   per run), reduced to its main text, and used instead of the short feed summary when it is longer: up to 6,000
-   characters reach the writer and checker (3,500 in feeds mode). Every sentence is still written from that one
-   source and fact-checked against it; nothing changes in the gate.
+3. **Research** (`newsbot/research.py`): the picked topic is deepened with keyless web lookups using its
+   `queries` (arXiv API abstracts, GitHub repository search for recently pushed repos, Hacker News stories with
+   >= 20 points used only as leads to their primary URL); leads without text are read first (3 pages max). The
+   pool is ranked with `rank.py` (per-source cap 4, lifted when the topic lives on one or two sources), then the
+   top stories' primary pages (article, arXiv abstract, release page) are fetched politely (robots.txt, the newsbot
+   UA, 20 s timeout, 1 MB cap, 8 fetches per run in total), reduced to their main text, and used instead of the
+   short feed summary when they add at least 400 characters: up to 6,000 characters reach the writer and checker
+   (3,500 in feeds mode). Every sentence is still written from that one source and fact-checked against it;
+   nothing changes in the gate.
 4. **Plan call** (one call, default Claude Haiku 5.5; `NEWSBOT_PLAN_MODEL=claude-sonnet-5-5` switches it): given
    the topic and the candidate titles, return the story order and a two-sentence spoken framing intro that must
    contain no number or named entity not present in the sources (deterministic check; on failure the fixed
    intro is used). It never writes claims.
-5. **Discovery lane** (one Haiku call per run): given all feed titles of the run and the current topic names,
-   propose at most one new, novel or newly popular area of AI with keywords and a one-line reason, or null. It is
-   added to `topics.json` (lane `discovered`) only if its keywords match >= 2 of the run's items, no existing topic
-   has a similar name/keywords, and no discovered topic was added today (`max_new_topics_per_day`, default 1).
+5. **Discovery lane** (`newsbot/discovery.py`, one Haiku call per run, skipped once the day's cap is reached):
+   given the run's item titles and the current topics, propose at most one new, novel or newly popular area of AI
+   (id, name, description, keywords, queries, one-line reason) or null. It enters `topics.json` (lane `discovered`)
+   only if its keywords match >= 2 of the run's items, no existing topic is similar (name/keyword token overlap),
+   the reply validates field by field, and no discovered topic was added today (`settings.max_new_topics_per_day`,
+   default 1; `settings.discovery_enabled` turns the lane off).
 6. **Dedupe**: covered URLs are excluded at step 1; the history entry is appended after the episode is published.
 
 ## Cost and models
@@ -58,7 +63,10 @@ Measured cost per episode is in `report.json` (`llm.cost_usd_estimate`, split by
 `script.json` gains `topic`, `rundown_title` and the planned `intro`; `report.json` gains `topic` and
 `llm.cost_by_kind` (write / check / repair / plan / discover). The job summary shows the topic, sources read,
 plan model, discovery outcome and the cost split. Workflow inputs: `mode` (topic | feeds), `topic` (force an id),
-`plan_model`. Fixture runs (`--items-json`) fetch nothing.
+`plan_model`. Fixture runs (`--items-json`) fetch nothing. After a publish the workflow runs
+`site/test/e2e-live.js` (Playwright) against https://ai-247.pages.dev: playlist 200, media sequence rising, page in
+state live, video time advancing, segments as video/mp2t, and whether the new bulletin is already in the playlist
+(it airs at the next cycle boundary).
 
 ## Persistence
 
@@ -70,5 +78,5 @@ restores the old digest behaviour without a commit.
 
 ## Not in scope
 
-Web search APIs (none without a key); the discovery call sees only what the feeds carried this run. Article
-fetching respects robots.txt and fetches at most 8 pages per run.
+Keyed web search APIs; the discovery call sees only the titles the feeds and topic sources carried this run.
+Page fetching respects robots.txt and reads at most 8 pages per run.

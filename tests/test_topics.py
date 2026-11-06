@@ -1,12 +1,15 @@
-"""Topic research stage (docs/TOPICS.md): matching, deterministic scoring and repeat blocking, primary-source
-reading, the plan and discovery calls with a scripted client, the discovery gate, and the history record."""
+"""Topic research stage (docs/TOPICS.md): matching, deterministic scoring and repeat blocking, the plan call with a
+scripted client, the stage round trip (offline) and the history record. Primary-source reading and the discovery
+gate are covered by tests/test_research.py."""
 import json
 import time
 from types import SimpleNamespace
 
 import pytest
 
-from newsbot import feeds, llm, topics
+import dataclasses
+
+from newsbot import discovery, feeds, llm, research, topics
 from tests.fixtures import make_items
 from tests.test_day1_units import Scripted
 
@@ -116,34 +119,6 @@ def test_nothing_pickable_falls_back_and_force_overrides():
     assert t["id"] == "ai-vfx"
 
 
-# ---------- primary sources ----------
-def test_html_to_text_prefers_article_and_strips_chrome():
-    html = ("<html><head><script>var x=1;</script><style>p{}</style></head><body><nav>Menu Home</nav>"
-            "<article><h1>Title</h1><p>" + "Body sentence number one. " * 20 + "</p></article><footer>foot</footer></body></html>")
-    txt = topics.html_to_text(html)
-    assert txt.startswith("Title.") and "Body sentence" in txt and "Menu" not in txt and "foot" not in txt and "var x" not in txt
-
-
-def test_research_replaces_summary_only_when_page_is_richer_and_respects_budget(monkeypatch):
-    its = agent_items(3) + [item("Claude Code releases", "v2", "release notes " * 20, "https://github.com/x/y/releases/tag/v2")]
-    long_page = "Primary text. " * 300
-    calls = []
-
-    def fake(url):
-        calls.append(url)
-        return (long_page, "ok") if url.endswith("/0") else ("tiny", "ok")
-    reps = topics.research(its, max_fetch=2, fetch=fake, log=lambda *a: None)
-    assert calls == ["https://example.com/agents/0", "https://example.com/agents/1"]
-    assert its[0].summary == long_page[: topics.SOURCE_CHARS] and reps[0]["ok"]
-    assert its[1].summary.startswith("The coding agent") and not reps[1]["ok"]
-    assert reps[2]["note"] == "fetch budget used" and reps[3]["note"].startswith("release body")
-
-
-def test_fetch_text_honours_robots(monkeypatch):
-    monkeypatch.setattr(feeds, "robots_allows", lambda url, timeout=10.0: "disallowed")
-    assert topics.fetch_text("https://example.com/a") == ("", "robots.txt disallows")
-
-
 # ---------- LLM calls ----------
 def test_plan_call_orders_validates_and_gates_the_intro():
     t = cfg()["topics"][0]
@@ -168,29 +143,6 @@ def test_plan_call_uses_plan_model_and_sonnet_price(monkeypatch):
     assert round(m.usd, 6) == round((1000 * 2.0 + 100 * 10.0) / 1e6, 6)   # Sonnet 5.5 prices, not Haiku's
 
 
-def test_discovery_gate_accepts_evidenced_novel_topic_and_rejects_overlap_and_daily_cap():
-    c = cfg()
-    its = [item("OpenAI", f"Robot humanoid learns {k}", "humanoid robots in warehouses " * 8, f"https://example.com/r/{k}") for k in range(3)]
-    prop = {"name": "Humanoid robots", "keywords": ["humanoid", "humanoid robots", "warehouse robots"], "reason": "three items today"}
-    assert topics.gate_proposal(c, prop, its, "2026-11-06")[0]
-    assert not topics.gate_proposal(c, {**prop, "keywords": ["spaceships"]}, its, "2026-11-06")[0]          # no evidence
-    assert not topics.gate_proposal(c, {**prop, "name": "AI agent harnesses"}, its, "2026-11-06")[0]       # name overlap
-    assert not topics.gate_proposal(c, {**prop, "keywords": ["agent", "codex", "humanoid"]}, its, "2026-11-06")[0]  # keyword overlap
-    t = topics.apply_proposal(c, prop, "2026-11-06")
-    assert t["lane"] == "discovered" and t["id"] == "humanoid-robots" and t["reason"]
-    ok, why = topics.gate_proposal(c, {**prop, "name": "Robot dogs"}, its, "2026-11-06")
-    assert not ok and "max_new_topics_per_day" in why
-
-
-def test_discover_call_handles_null_and_garbage():
-    c = cfg()
-    d = topics.discover_call(Scripted(lambda s, u: json.dumps({"topic": None})), llm.Meter(), c, agent_items(3), "2026-11-06")
-    assert d["proposal"] is None and not d["accepted"]
-    d = topics.discover_call(Scripted(lambda s, u: "nope"), llm.Meter(), c, agent_items(3), "2026-11-06")
-    assert not d["accepted"] and "failed" in d["reason"]
-    assert len(c["topics"]) == 2   # the call never mutates the config
-
-
 # ---------- stage + history ----------
 def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -199,8 +151,7 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     shutil.copy(os.path.join(os.path.dirname(__file__), "..", "topics", "topics.json"), "topics/topics.json")
     monkeypatch.setattr(topics, "TOPICS_PATH", tmp_path / "topics/topics.json")
     monkeypatch.setattr(topics, "HISTORY_PATH", tmp_path / "episodes/history.json")
-    monkeypatch.setattr(topics, "fetch_topic_sources", lambda c: ([], []))
-    monkeypatch.setattr(topics, "research", lambda items, **k: [{"url": i.url, "ok": False, "note": "offline"} for i in items])
+    monkeypatch.setenv("NEWSBOT_OFFLINE", "1")          # no topic feeds, no web candidates, no page fetches
     monkeypatch.delenv("NEWSBOT_TOPIC", raising=False)
     its = agent_items(6) + make_items(4, NOW)
     reports = []
@@ -208,7 +159,9 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     def handler(system, user):
         if system == topics.PLAN_SYS:
             return json.dumps({"order": [2, 1, 3, 4, 5, 6], "intro": "This episode is about coding agents. Here is what the sources say."})
-        return json.dumps({"topic": {"name": "Acme widgets", "keywords": ["widget", "acme"], "reason": "many widget items"}})
+        assert system == discovery.DISCOVERY_SYS
+        return json.dumps({"topic": {"id": "acme-widgets", "name": "Acme widgets", "description": "Widgets.", "keywords": ["widget", "acme", "widgets"],
+                                     "queries": ["acme widget"], "reason": "many widget items"}})
     m = llm.Meter()
     tr = topics.research_stage(its, reports, NOW, Scripted(handler), m, tmp_path / "episode", log=lambda *a: None)
     info = json.loads((tmp_path / "episode/topic_pick.json").read_text())
@@ -216,7 +169,7 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     # one source only: the per-source cap (4) would leave fewer than min_items, so it is lifted and all 6 air
     assert [i.url for i in tr["ranked"][:2]] == [its[1].url, its[0].url] and len(tr["ranked"]) == 6
     assert tr["script_extra"]["rundown_title"].endswith("coding agents") and tr["script_extra"]["intro"].startswith("This episode")
-    assert info["discovery"]["accepted"] and set(m.by_kind) == {"plan", "discover"}
+    assert info["discovery"]["accepted"] and info["discovery"]["entry"]["id"] == "acme-widgets" and "plan" in m.by_kind and m.calls == 2
     # record: the history gets the episode, topics.json gets the discovered lane entry (once per day)
     script = {"topic": info["topic"], "stories": [{"source": "OpenAI", "url": i.url, "headline": i.title,
                                                    "sentences": [{"text": "A sentence."}]} for i in tr["ranked"][:3]]}
@@ -230,13 +183,32 @@ def test_research_stage_writes_pick_and_history_record_round_trip(tmp_path, monk
     e = h["episodes"][0]
     assert e["topic"] == "agent-harnesses" and e["cost_usd"] == 0.0123 and len(e["stories"]) == 3 and len(e["sentence_sha256"]) == 3 and e["r2_prefix"] == "bulletins/x"
     c2 = json.loads((tmp_path / "topics/topics.json").read_text())
-    assert c2["topics"][-1]["lane"] == "discovered" and c2["topics"][-1]["added"] == "2027-01-15"
+    assert c2["topics"][-1]["lane"] == "discovered" and c2["topics"][-1]["added"] == "2027-01-15" and "settings" in c2 and "_rx" not in c2["topics"][0]
+    assert "repeat_after_episodes" not in c2   # settings are written once, under "settings"
     # same run recorded twice: one entry; a second proposal the same day is not added
     topics.record(tmp_path, run_id="4242", now=NOW)
     assert len(json.loads((tmp_path / "episodes/history.json").read_text())["episodes"]) == 1 and len(json.loads((tmp_path / "topics/topics.json").read_text())["topics"]) == 3
     # next run: the covered URLs are excluded and the topic is blocked (aired 0 episodes ago, no new items)
     t, scores, _ = topics.pick(topics.load_topics(), its, topics.load_history(), NOW + 60)
     assert {s["id"]: s for s in scores}["agent-harnesses"]["blocked"]
+
+
+def test_deepen_reads_leads_first_and_keeps_only_items_with_text(monkeypatch):
+    t = cfg()["topics"][0]
+    web = [feeds.Item("acme.example", "Lead one", "", "https://acme.example/1", "2026-11-06", NOW - 100),
+           feeds.Item("arXiv search", "Paper", "An abstract about agent harnesses. " * 5, "https://arxiv.org/abs/1", "2026-11-06", NOW - 100),
+           feeds.Item("acme.example", "Covered lead", "", "https://example.com/agents/0", "2026-11-06", NOW - 100)]
+    monkeypatch.setattr(research, "web_candidates", lambda topic, token="", log=print, now=None: (web, [{"api": "x"}]))
+    fetched = []
+
+    def fake_enrich(items, max_fetch, max_chars, log):
+        fetched.extend(i.url for i in items)
+        return [dataclasses.replace(i, summary="Lead text. " * 60) for i in items], [{"url": i.url, "fetched": True, "seconds": 0.1} for i in items]
+    monkeypatch.setattr(research, "enrich", fake_enrich)
+    pool, rep = topics.deepen(t, agent_items(2), {"https://example.com/agents/0"}, NOW)
+    assert fetched == ["https://acme.example/1"]                      # only the uncovered lead without text
+    assert [i.url for i in pool] == ["https://example.com/agents/0", "https://example.com/agents/1", "https://arxiv.org/abs/1", "https://acme.example/1"]
+    assert rep["web"] == [{"api": "x"}] and len(rep["leads"]) == 1
 
 
 def test_merge_history_unions_by_run_id():
