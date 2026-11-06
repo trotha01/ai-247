@@ -1,1 +1,1 @@
-{"state":"running","msg":"PR #8 updated from main, ci re-running; day0 run 42211796435 green with r2_upload 18 s; wiring Day 1 publish (segments first, root manifest last) in a PR, then two day1 dispatches"}
+{"state":"running","msg":"PR #18 (Day 1 R2 publish) merged; day1-episode llm=off run 42212912268 running on main; PR #8 e2e job hit the Node install timeout once, re-run 1 of 2 in progress"}

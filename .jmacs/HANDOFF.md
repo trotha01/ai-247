@@ -12,10 +12,14 @@ AI-247 "fix PR 8 check and test R2 upload": get PR #8 (Day 3 dark-mode link colo
 - day0-bulletin run 42211796435 on main (dispatched before the orchestrator's correction): green, stage r2_upload 18.36 s with the real secrets, Day 0 layout bulletins/<ts>/ (manifest.json before segments).
 - Orchestrator correction received: wire the upload into Day 1. Done on this branch: newsbot/channel.py (Python port of the Worker swap math, vectors checked against worker/src/playlist.js), newsbot/publish.py (segments first, per-block manifest after its segments, root manifest.json last in one PutObject; replays from the live manifest; skip with a log line without secrets), r2.py client()/bucket() helpers, tests/test_publish.py (17 tests, pass), day1.yml step "Publish to R2" after the Tests step with the four R2_* secrets, ci.yml runs the new test, docs/R2_LAYOUT.md section.
 
+- PR #18 (this work) ci green (tests + worker-site-e2e), squash-merged to main as 31f27fb. Branch restarted from main for the docs note.
+- PR #8 ci re-run after update-branch: tests job green; worker-site-e2e timed out in its Node install step (npm ci / playwright install, no output for 8 min, the same transient stall; the identical job on PR #18 passed minutes later). Re-run 1 of 2 requested (gh run rerun --failed).
+- day1-episode dispatch 1 of 2: llm=off, run 42212912268 on main (head 31f27fb).
+
 ## Pending
-- Open the PR for this branch, merge after ci; merge PR #8 after ci.
-- Dispatch day1-episode on main: llm=off, then llm=on (max two). Confirm keys and the root manifest in the log.
-- Record "R2 upload verified" in docs/PLAN.md (second small PR or the same branch after the runs).
+- PR #8: merge once the re-run is green (one re-run left; if it stalls again, report and stop).
+- day1-episode dispatch 2 of 2 (llm=on) after run 42212912268 finishes; confirm keys and the root manifest in both logs.
+- "R2 upload verified" note in docs/PLAN.md via PR from this branch; merge after ci; status done.
 
 ## Next step
-Push, open PR, wait for ci on both PRs.
+Wait for run 42212912268 and the PR #8 re-run.
