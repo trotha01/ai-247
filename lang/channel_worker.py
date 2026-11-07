@@ -161,6 +161,14 @@ def enforce_cap(s3, bucket: str, prefix: str, cap_bytes: int, min_age_s: int = 3
     log(f"storage: {total / 1e9:.2f} GB under {prefix} (cap {cap_bytes / 1e9:.1f} GB), deleted {deleted} old block(s)")
 
 
+def pace_wait(fresh_seconds, ahead_s: float) -> float:
+    """Seconds to wait so the unplayed fresh queue drains to ahead_s (rendering is ~4x faster than real time)."""
+    try:
+        return max(0.0, float(fresh_seconds) - ahead_s)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def prune_local(root: Path, cap_bytes: int) -> int:
     """Keep ROOT under cap_bytes: delete the oldest leftover work/<block>/ folders (failed blocks keep theirs), then
     the oldest done/ and failed/ scripts. Returns how many paths were removed."""
@@ -187,6 +195,8 @@ def main(argv=None):
     ap.add_argument("--cap-gb", type=float, default=6.0)
     ap.add_argument("--local-cap-gb", type=float, default=3.0, help="cap on this machine's work/done/failed folders")
     ap.add_argument("--max-replays", type=int, default=30, help="earlier blocks kept looping behind the fresh one")
+    ap.add_argument("--ahead-s", type=float, default=300,
+                    help="pace to real time: after a publish, wait until at most this many seconds of fresh lessons are unplayed")
     ap.add_argument("--max-blocks", type=int, default=0, help="stop after this many published blocks (0 = run forever)")
     ap.add_argument("--dry-run", action="store_true", help="render and segment, do not upload")
     a = ap.parse_args(argv)
@@ -249,6 +259,12 @@ def main(argv=None):
             except Exception as e:
                 log(f"cap check failed (will retry next block): {e!r}")
             shutil.rmtree(bdir, ignore_errors=True)
+        wait = pace_wait(summary.get("fresh_seconds"), a.ahead_s)
+        if wait and not a.max_blocks:
+            log(f"{summary['fresh_seconds']:.0f} s of fresh lessons queued: waiting {wait:.0f} s (real-time pacing)")
+            end = time.time() + wait
+            while time.time() < end and not (a.root / "STOP").exists():
+                time.sleep(min(10, end - time.time()))
         if prune_local(a.root, int(a.local_cap_gb * 1e9)):
             log(f"local cache over {a.local_cap_gb} GB: pruned oldest work/done/failed")
         if a.max_blocks and published >= a.max_blocks:
