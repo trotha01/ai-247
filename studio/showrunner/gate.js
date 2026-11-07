@@ -23,7 +23,8 @@ const DSH_LOG = process.env.DSH_LOG;
 const PASSWORD = fs.readFileSync(process.env.GATE_PASSWORD_FILE, "utf8").trim();
 const SECRET = crypto.randomBytes(32); // new on every start: everyone logs in again after a restart
 const COOKIE = "sr_gate";
-const STREAM = "https://aitv-live.mychalsimka.workers.dev/live.m3u8";
+// the puddle-live Worker's playlist (start_showrunner.sh passes PUDDLE_STREAM_URL; this is its default)
+const STREAM = process.env.PUDDLE_STREAM_URL || "https://puddle-live.trotha01.workers.dev/live.m3u8";
 const CHANNEL = ["/hyperai/home/venv/bin/python", "/hyperai/home/bin/channel"];
 const PROPOSALS = "/hyperai/home/loop/puddle/proposals";
 const ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9_]{1,40}$/;

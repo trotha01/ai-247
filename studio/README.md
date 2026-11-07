@@ -22,7 +22,7 @@ and `worker/src` (the HLS Worker), with every R2 key under the prefix `puddle/`.
  │  producer_loop ──scene JSON──► inbox/ ──► channel_worker: voice.py ─► Blender puddle.py ─► ffmpeg ─► HLS ──┼──► R2 puddle/
  │      ▲ brief.md + standing directions        │  (renders as user "render"; MOSS windows between blocks)    │       │
  │      │                                       └─ backdrops.py: MOSS image library (backdrops, title cards)  │       ▼
- │  showrunner (dsh web, user "show") ── channel (root service, per-user permissions) ── proposals/          │   Worker aitv-live
+ │  showrunner (dsh web, user "show") ── channel (root service, per-user permissions) ── proposals/          │   Worker puddle-live
  │  engineer (dsh headless, user "eng"): builder + reviewer ── eng-test ── submit ──► owner approves ──► actions/live/  │   (worker/src)
  └────────────────────────────────────────────────────────────────────────────────────────────────────────────┘       ▼
    gate.js (password, user "gate") ◄── Cloudflare quick tunnel ◄── showrunner-link Worker (fixed link)         puddle-park.pages.dev
@@ -37,7 +37,7 @@ and `worker/src` (the HLS Worker), with every R2 key under the prefix `puddle/`.
 | Showrunner | `showrunner/` | box | A dsh (DeepSeek harness) web agent people chat with; watches what is on air and steers the producer only through the `channel` command |
 | Studio page | `showrunner/gate.js` | box | Password page; one screen with the live channel, the standing directions, the latest scenes, new-action requests and the chat |
 | Engineer | `engineer/` | box | Builds requested actions as plug-ins: a builder writes and test-renders (`eng-test`), a fresh reviewer looks at the frames and submits or sends it back |
-| Stream + page | `cloudflare/` | Cloudflare | `aitv-live` deploys this repo's `worker/src` with `PREFIX=puddle/`; `puddle-site` is the player page; `showrunner-link` redirects a fixed URL to the current tunnel |
+| Stream + page | `cloudflare/` | Cloudflare (Trevor's account) | `puddle-live` deploys this repo's `worker/src` with `PREFIX=puddle/`, only through `.github/workflows/deploy-puddle.yml`; `puddle-site` is the player page; `showrunner-link` redirects a fixed URL to the current tunnel |
 
 ## Day-to-day (owners)
 
@@ -70,6 +70,20 @@ Everything the showrunner can do is the `channel` command (`showrunner/channel`,
 Only `/hyperai/home` survives a container restart (it is a link to `/output`; dsh keys workspaces by the real path).
 After a restart nothing starts by itself yet: `run_llama.sh`, `run_channel_service.sh`, `run_producer.sh`,
 `run_worker.sh --block 4 --renders 4`, the engineer loop and `showrunner/start_showrunner.sh` (one boot script is a TODO).
+
+## Accounts, storage and deploys
+
+- **Storage:** one R2 bucket, `aitv-media` on Trevor's Cloudflare account, shared by every channel, each under its own
+  prefix: ai-247 owns `bulletins/` and `pool/` at the root, Puddle Park owns `puddle/` (stream blocks, its replay pool
+  at `puddle/pool/`, the showrunner's tunnel address at `puddle/showrunner/url.txt`). Nothing in `studio/` writes
+  outside `puddle/`; `channel_worker.py` refuses any other `--prefix`.
+- **The box** holds only an R2 key for that bucket in `/hyperai/home/.r2.env` (root only): `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=aitv-media`. No Cloudflare Workers or Pages rights.
+- **Workers** `puddle-live` (`cloudflare/puddle-live/`, the stream) and `puddle-showrunner` (`cloudflare/showrunner-link/`,
+  the fixed link) live on Trevor's account and are deployed **only** by `.github/workflows/deploy-puddle.yml`, which is
+  off until Trevor sets the repository variable `PUDDLE_DEPLOY_ENABLED=true`. Do not run `wrangler deploy` by hand.
+- **Stream URL:** `PUDDLE_STREAM_URL` (default `https://puddle-live.trotha01.workers.dev/live.m3u8`) for the studio
+  page and `channel status`; `cloudflare/puddle-site/config.json` for the public page.
 
 ## Security model
 

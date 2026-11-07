@@ -1,0 +1,74 @@
+name: deploy-puddle
+
+# Puddle Park's Cloudflare Workers, on this repository's Cloudflare account (the existing CLOUDFLARE_API_TOKEN):
+#   studio/cloudflare/puddle-live/       -> Worker `puddle-live` (this repo's worker/src, PREFIX=puddle/, bucket aitv-media)
+#   studio/cloudflare/showrunner-link/   -> Worker `puddle-showrunner` (fixed link to the showrunner tunnel)
+# This is the ONLY way those Workers are deployed: the Puddle Park box holds an R2 key and no Workers/Pages rights.
+#
+# Off by default. A run deploys only when ALL hold: the repository variable PUDDLE_DEPLOY_ENABLED is `true` (unset or
+# anything else = log and stop, so merging changes here deploys nothing until Trevor turns it on), the ref is main,
+# and the push touched studio/cloudflare/ (or it is a manual run). tests/test_deploy_guard.py checks these gates and
+# that the configs stay on aitv-media under puddle/.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "studio/cloudflare/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-puddle
+  cancel-in-progress: false
+
+jobs:
+  deploy-puddle:
+    if: github.repository == 'trotha01/ai-247' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Gate (PUDDLE_DEPLOY_ENABLED and the Cloudflare secrets)
+        id: gate
+        env:
+          ENABLED: ${{ vars.PUDDLE_DEPLOY_ENABLED }}
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "$ENABLED" != "true" ]; then
+            echo "::notice::PUDDLE_DEPLOY_ENABLED is not 'true': Puddle Park deploy is off (no-op)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set: skipping (no-op)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.ready == 'true'
+      - name: Config check (Worker names, shared bucket, puddle/ prefix)
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          set -eu
+          L=studio/cloudflare/puddle-live/wrangler.toml; S=studio/cloudflare/showrunner-link/wrangler.toml
+          grep -qx 'name = "puddle-live"' $L && grep -qx 'bucket_name = "aitv-media"' $L && grep -qx 'PREFIX = "puddle/"' $L
+          grep -qx 'name = "puddle-showrunner"' $S && grep -qx 'bucket_name = "aitv-media"' $S
+          grep -q '"puddle/showrunner/url.txt"' studio/cloudflare/showrunner-link/src/index.js
+          echo "config ok"
+      - name: Deploy puddle-live
+        if: steps.gate.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: studio/cloudflare/puddle-live
+          command: deploy
+      - name: Deploy puddle-showrunner
+        if: steps.gate.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: studio/cloudflare/showrunner-link
+          command: deploy

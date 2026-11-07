@@ -1,4 +1,6 @@
-name = "showrunner"
+# Fixed link to the showrunner studio (Puddle Park), on Trevor's account; deployed ONLY by .github/workflows/deploy-puddle.yml.
+# Reads puddle/showrunner/url.txt from the shared bucket (Puddle Park writes only under puddle/).
+name = "puddle-showrunner"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 workers_dev = true

@@ -1,13 +1,16 @@
 #!/bin/bash
 # Start (or restart) the public, password-protected showrunner. Run as root on the GPU box.
 #   Cloudflare quick tunnel (user gate) -> gate.js password page (user gate, :3080) -> dsh web (user show, :3081)
-# The tunnel address changes on every start; it is saved to R2 (showrunner/url.txt) for the fixed redirect link.
+# The tunnel address changes on every start; it is saved to R2 (puddle/showrunner/url.txt) for the fixed redirect link.
+# The studio page plays PUDDLE_STREAM_URL (the puddle-live Worker's playlist; default below).
 set -euo pipefail
 H=/hyperai/home
 SR=$H/showrunner            # root-owned: scripts, instructions, skill, password
 RUN=$SR/run                 # logs (readable by gate and show)
 SHOW=$H/show                # the agent user's home (its dsh state and work folder)
 export PATH=$H/node/bin:$H/dsh-global/bin:$H/bin:$PATH
+STREAM_URL=${PUDDLE_STREAM_URL:-https://puddle-live.trotha01.workers.dev/live.m3u8}
+[[ $STREAM_URL =~ ^https://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]*$ ]] || { echo "bad PUDDLE_STREAM_URL"; exit 1; }
 
 id show >/dev/null 2>&1 || useradd -u 1001 -M -d $SHOW -s /bin/bash show
 id gate >/dev/null 2>&1 || useradd -u 1002 -M -d /nonexistent -s /usr/sbin/nologin gate
@@ -60,7 +63,7 @@ grep -q "token=" $RUN/dsh.log || { echo "dsh did not start"; tail -30 $RUN/dsh.l
 echo "dsh: up"
 
 # 3. password gate
-su gate -s /bin/bash -c "PUBLIC_HOST=$HOST DSH_LOG=$RUN/dsh.log GATE_PASSWORD_FILE=$SR/password \
+su gate -s /bin/bash -c "PUBLIC_HOST=$HOST DSH_LOG=$RUN/dsh.log GATE_PASSWORD_FILE=$SR/password PUDDLE_STREAM_URL=$STREAM_URL \
   nohup $H/node/bin/node $SR/gate.js >> $RUN/gate.log 2>&1 < /dev/null &"
 sleep 2
 curl -s -o /dev/null -w "gate: %{http_code}\n" -H "Accept: text/html" http://127.0.0.1:3080/
@@ -72,7 +75,7 @@ from pathlib import Path
 env = dict(l.split("=", 1) for l in Path("/hyperai/home/.r2.env").read_text().split() if "=" in l)
 c = boto3.client("s3", endpoint_url=f"https://{env['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
                  aws_access_key_id=env["R2_ACCESS_KEY_ID"], aws_secret_access_key=env["R2_SECRET_ACCESS_KEY"], region_name="auto")
-c.put_object(Bucket=env["R2_BUCKET"], Key="showrunner/url.txt", Body=sys.argv[1].encode(), ContentType="text/plain")
-print("saved address to R2 showrunner/url.txt")
+c.put_object(Bucket=env["R2_BUCKET"], Key="puddle/showrunner/url.txt", Body=sys.argv[1].encode(), ContentType="text/plain")
+print("saved address to R2 puddle/showrunner/url.txt")
 Y
 echo "SHOWRUNNER UP: $URL"
