@@ -13,7 +13,8 @@ PAYLOAD=$(COPYFILE_DISABLE=1 tar --no-xattrs -czf - engine pipeline showrunner e
 RESTART=$([ "$1" = "--restart" ] && echo 1 || echo 0)
 cat <<SCRIPT | "$HERE/tools/box.sh"
 set -e
-T=\$(mktemp -d); echo "$PAYLOAD" | base64 -d | tar xzf - -C \$T
+T=\$(mktemp -d); echo "$PAYLOAD" | base64 -d | tar --no-same-owner -xzf - -C \$T
+chown -R root:root \$T; chmod -R go-w \$T   # root runs this code: never keep the laptop's file owners
 H=/hyperai/home; E=\$H/kids-test/blender
 cp \$T/engine/puddle.py \$T/engine/voice.py \$T/engine/make_clip.sh \$T/pipeline/*.py \$E/
 sed '1s|.*|#!/hyperai/home/venv/bin/python|' \$T/showrunner/channel > \$H/bin/channel
