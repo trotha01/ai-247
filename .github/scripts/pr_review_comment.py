@@ -9,7 +9,10 @@ Reads from the environment (set by .github/workflows/pr-review.yml):
   DIFF_TRUNCATED  "true" when the diff shown to Claude was cut at MAX_DIFF_BYTES
   REVIEW_MODEL    model id, for the footer
 
-Exit status is the check result: 0 = no blocking finding, 1 = blocking finding or review failed.
+Writes `status=<one of CHECK's keys>` to $GITHUB_OUTPUT and always exits 0: the `claude-review` job in
+pr-review.yml turns the status into the check result. CHECK below is that mapping: a verdict (ok, blocking) or the
+fork gate (skipped) is reported; a review that errored (incomplete: the step failed, timed out or hit a cap;
+noresult: the step returned no structured verdict) is neutral, the check job is skipped and only this comment says so.
 Stdlib only; never prints secrets.
 """
 from __future__ import annotations
@@ -22,6 +25,8 @@ import urllib.request
 
 MARKER = "<!-- claude-pr-review -->"
 API = "https://api.github.com"
+# status -> what the `claude-review` check reports (pr-review.yml: neutral = the check job is skipped)
+CHECK = {"ok": "pass", "blocking": "fail", "skipped": "fail", "incomplete": "neutral", "noresult": "neutral"}
 
 
 def gh(method: str, path: str, body: dict | None = None):
@@ -53,8 +58,8 @@ def finding_line(item) -> str:
     return f"- {where}{item.get('finding', '')}".rstrip()
 
 
-def build(repo: str, pr: str) -> tuple[str, bool]:
-    """Return (markdown, failed)."""
+def build(repo: str, pr: str) -> tuple[str, str]:
+    """Return (markdown, status) with status one of CHECK's keys."""
     skipped = os.environ.get("REVIEW_SKIPPED") == "true"
     outcome = os.environ.get("REVIEW_OUTCOME", "")
     raw = os.environ.get("REVIEW_JSON", "").strip()
@@ -69,7 +74,7 @@ def build(repo: str, pr: str) -> tuple[str, bool]:
             "(`FORK_REVIEW_AUTHORS` in `.github/workflows/pr-review.yml`), so the repository's Anthropic key was "
             "not used. The tests in `ci` still run. A maintainer reviews this PR by hand.\n"
         )
-        return md, True
+        return md, "skipped"
 
     data = None
     if raw:
@@ -78,13 +83,17 @@ def build(repo: str, pr: str) -> tuple[str, bool]:
         except json.JSONDecodeError:
             data = None
     if outcome != "success" or not isinstance(data, dict):
+        why = (f"The review step ended with outcome `{outcome or 'unknown'}` (an API error, a token or rate limit, the "
+               "action's turn cap, a timeout or a crash)" if outcome != "success"
+               else "The review step finished but returned no structured verdict")
         md = (
-            f"{MARKER}\n## Claude review: failed to run\n\n"
-            f"The review step ended with outcome `{outcome or 'unknown'}` and returned no structured result. "
-            f"Check the [workflow run]({run_url}) (API key, credit limit, or a transient error) and re-run the job. "
-            "No finding was recorded; this check stays red until a run completes.\n"
+            f"{MARKER}\n## Claude review: did not complete (no verdict)\n\n"
+            f"{why}; see the [workflow run]({run_url}). **No finding was recorded and nothing in this PR has been "
+            "reviewed by Claude.** By repository policy an errored review does not block the merge: the "
+            "`claude-review` check is skipped (neutral). A maintainer reviews this PR by hand, or re-runs the job "
+            "for a verdict.\n"
         )
-        return md, True
+        return md, "incomplete" if outcome != "success" else "noresult"
 
     blocking = data.get("blocking") or []
     non_blocking = data.get("non_blocking") or []
@@ -102,13 +111,13 @@ def build(repo: str, pr: str) -> tuple[str, bool]:
     if truncated:
         foot += " _The diff was truncated for review; large PRs deserve a human look._"
     lines += [foot, f"_[Run]({run_url})_"]
-    return "\n".join(lines) + "\n", bool(blocking)
+    return "\n".join(lines) + "\n", "blocking" if blocking else "ok"
 
 
 def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     pr = os.environ["PR_NUMBER"]
-    md, failed = build(repo, pr)
+    md, status = build(repo, pr)
 
     existing = None
     page = 1
@@ -131,9 +140,18 @@ def main() -> int:
         print(f"::warning::could not post the review comment: HTTP {e.code}")
 
     print(md)
-    if failed:
-        print("::error::Claude review: blocking finding or review did not run")
-        return 1
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a") as f:
+            f.write(f"status={status}\n")
+    if CHECK[status] == "neutral":
+        print("::warning::Claude review did not complete: no verdict; the claude-review check is skipped (neutral). "
+              "Review by hand or re-run the job.")
+    elif status == "blocking":
+        print("::error::Claude review: blocking finding")
+    elif status == "skipped":
+        print("::error::Claude review not run: fork author is not on FORK_REVIEW_AUTHORS")
+    print(f"status: {status} (check: {CHECK[status]})")
     return 0
 
 
