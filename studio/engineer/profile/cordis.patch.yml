@@ -1,0 +1,33 @@
+# The engineer's model: Qwen 3.8 27B on this box's llama-server, thinking off (short, direct work; small shared memory).
+- id: llm-pi-ai
+  config:
+    providers:
+      box:
+        displayName: GPU box
+        apiKeyEnv: LLAMA_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:8080/v1
+        compat:
+          supportsDeveloperRole: false
+          maxTokensField: max_tokens
+          thinkingFormat: chat-template
+          chatTemplateKwargs:
+            enable_thinking: false
+        models:
+          - id: qwen3.8-uncensored
+            name: Qwen 3.8 27B
+            contextWindow: 20480
+            maxTokens: 6144
+            input: [ text, image ]
+            reasoningEfforts: false
+            compat:
+              supportsDeveloperRole: false
+              maxTokensField: max_tokens
+              thinkingFormat: chat-template
+              chatTemplateKwargs:
+                enable_thinking: false
+
+- id: agent-default-model
+  config:
+    provider: box
+    model: qwen3.8-uncensored
