@@ -1,0 +1,3 @@
+# never commit: box address (see env.box.example) and wrangler caches (they hold the Cloudflare account)
+.env.box
+.wrangler/
