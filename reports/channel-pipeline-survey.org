@@ -20,8 +20,8 @@ Pipeline base (why in brief):
   several boxes. Temporal and Airflow are too heavy, Arq is maintenance-only, n8n and Windmill have licence limits.
 - *ComfyUI* is an =image= node behind its =/prompt= API, not the orchestrator (single box, no cloud steps, weak retries).
 - *Playout stays R2 + Worker* (scales to zero); borrow ffplayout's schedule and filler model and Liquidsoap's fallback chain as ideas.
-- *Agentic nodes:* dsh pinned on llama-server via its OpenAI-compatible route, opencode as fallback, the Claude
-  Agent SDK only for nodes pinned to Claude. Pipecat later, only for a live tutor segment.
+- *Agentic nodes:* dsh pinned on llama-server via its OpenAI-compatible route (with its default DeepSeek session-log
+  upload turned off), opencode as fallback, the Claude Agent SDK only for nodes pinned to Claude. Pipecat later, only for a live tutor segment.
 
 Language channel stack:
 - *Text and morphology:* MACULA Greek (SBLGNT, CC BY 4.0); OSHB + MACULA Hebrew (WLC public domain, CC BY 4.0);
@@ -271,6 +271,10 @@ place of the ad hoc "MOSS windows between blocks".
 2. On the GPU box, replace the =run_*.sh= loops with one DBOS (or Huey) runner that owns the =gpu= lane; MOSS
    windows become ordinary =image= jobs in that lane instead of a pause between blocks. This also gives the box the
    boot script the studio README lists as missing.
+   When moving dsh to the pinned llama-server route, set =dsh-session-log-deepseek= to =enabled: false= in the
+   box's =cordis.patch.yml= (it is on by default and uploads session logs with requests to the official DeepSeek
+   API) and keep the OTel feedback upload off, so prompts and outputs stay on the box; confirm with a packet capture or
+   the dsh debug log that no request leaves for api.deepseek.com.
 3. Build the language channel on the contract from the start: corpus loader, lesson planner, gloss-check,
    pronunciation rules + Piper, HTML cards in Chromium, the shared encode and publish nodes, =PREFIX=lingua/=.
 4. Only then add a =schedule= node (ffplayout-style daily JSON) if fixed-time programming is wanted.
