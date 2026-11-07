@@ -1,15 +1,16 @@
+# systemd USER unit template (deploy/box/install.sh replaces @ROOT@). Renders lessons and publishes them under lang/.
 [Unit]
 Description=Language channel worker (render lessons, publish 1-lesson blocks to ai247-media lang/)
-After=network-online.target lang-producer.service
-Wants=network-online.target
+After=lang-producer.service
 
 [Service]
-WorkingDirectory=@REPO@
-EnvironmentFile=@HOME@/r2.env
-Environment=LANG_VOICES=@HOME@/voices
-ExecStart=@HOME@/venv/bin/python -u -m lang.channel_worker --root /hyperai/home/loop/lang --prefix lang/ --block 1 --max-wait 120
+WorkingDirectory=@ROOT@/src/ai-247
+EnvironmentFile=@ROOT@/lang/env
+EnvironmentFile=@ROOT@/lang/r2.env
+ExecStart=@ROOT@/venv/bin/python -u -m lang.channel_worker --root @ROOT@/lang/run --prefix lang/ --block 1 --max-wait 120 --local-cap-gb 3
 Restart=always
 RestartSec=10
+Nice=10
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

@@ -131,3 +131,26 @@ def test_lang_worker_config_and_deploy_gate():
 def test_lang_channel_workflow_publishes_only_under_lang():
     wf = (ROOT / ".github/workflows/lang-channel.yml").read_text()
     assert "--prefix lang/" in wf and "--key-prefix lang/" in wf and "R2_BUCKET: ai247-media" in wf
+
+
+def test_box_install_is_portable():
+    """No host-specific paths in the channel code or units; units restart forever and start at boot."""
+    files = [*ROOT.glob("lang/*.py"), *ROOT.glob("deploy/box/lang/*"), ROOT / "deploy/box/install.sh"]
+    for p in files:
+        t = p.read_text(errors="ignore")
+        for bad in ("/hyperai", "griffith", "/home/"):
+            assert bad not in t, (p, bad)
+    for u in ROOT.glob("deploy/box/lang/*.service"):
+        t = u.read_text()
+        assert "Restart=always" in t and "WantedBy=default.target" in t and "@ROOT@" in t
+
+
+def test_worker_prunes_local_cache(tmp_path):
+    from lang.channel_worker import prune_local
+    for i in range(3):
+        d = tmp_path / "work" / f"b{i}"
+        d.mkdir(parents=True)
+        (d / "x").write_bytes(b"0" * 1000)
+        os.utime(d, (i, i))
+    assert prune_local(tmp_path, 1500) == 2
+    assert [p.name for p in (tmp_path / "work").iterdir()] == ["b2"]

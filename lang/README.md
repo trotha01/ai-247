@@ -11,7 +11,7 @@ Deterministic from open data; no LLM. Sources and licences: [LICENSES.md](LICENS
     lang/channel_worker.py       inbox -> clips -> 6 s HLS block -> newsbot.publish under lang/ in ai247-media
     lang/cloudflare/lang-live    Worker config: worker/src with PREFIX=lang/ (deploy-lang.yml)
     site/lang/                   player page, ai-247.pages.dev/lang/
-    deploy/box/lang/             systemd units + start.sh for the HyperAI box
+    deploy/box/lang/             systemd user-unit templates; install with deploy/box/install.sh lang [ROOT]
 
 Try it locally (needs ffmpeg; voices from deploy/box/lang/fetch_voices.sh into $LANG_VOICES):
 

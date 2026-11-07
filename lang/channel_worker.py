@@ -11,7 +11,7 @@ Loop:
      earlier blocks kept as replays,
   5. keep the prefix under CAP_GB (delete the oldest blocks the live manifest no longer references).
 
-    python -m lang.channel_worker --root /hyperai/home/loop/lang --prefix lang/
+    python -m lang.channel_worker --root $CHANNELS_ROOT/lang/run --prefix lang/
     python -m lang.channel_worker --root /tmp/lang --max-blocks 25        # bounded test run, then exit
 """
 from __future__ import annotations
@@ -148,13 +148,31 @@ def enforce_cap(s3, bucket: str, prefix: str, cap_bytes: int, min_age_s: int = 3
     log(f"storage: {total / 1e9:.2f} GB under {prefix} (cap {cap_bytes / 1e9:.1f} GB), deleted {deleted} old block(s)")
 
 
+def prune_local(root: Path, cap_bytes: int) -> int:
+    """Keep ROOT under cap_bytes: delete the oldest leftover work/<block>/ folders (failed blocks keep theirs), then
+    the oldest done/ and failed/ scripts. Returns how many paths were removed."""
+    def size(p: Path) -> int:
+        return sum(f.stat().st_size for f in p.rglob("*") if f.is_file()) if p.is_dir() else p.stat().st_size
+    items = [p for d in ("work", "done", "failed") for p in (root / d).glob("*")]
+    total = sum(size(p) for p in items)
+    removed = 0
+    for p in sorted(items, key=lambda p: p.stat().st_mtime):
+        if total <= cap_bytes:
+            break
+        total -= size(p)
+        shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+        removed += 1
+    return removed
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", type=Path, default=Path("/hyperai/home/loop/lang"))
+    ap.add_argument("--root", type=Path, required=True, help="channel state folder (inbox/, done/, work/ ...)")
     ap.add_argument("--prefix", default="lang/")
     ap.add_argument("--block", type=int, default=1, help="lessons per published block (1 lesson = ~45-60 s)")
     ap.add_argument("--max-wait", type=int, default=120, help="publish a partial block if the oldest script waited this long")
     ap.add_argument("--cap-gb", type=float, default=6.0)
+    ap.add_argument("--local-cap-gb", type=float, default=3.0, help="cap on this machine's work/done/failed folders")
     ap.add_argument("--max-replays", type=int, default=30, help="earlier blocks kept looping behind the fresh one")
     ap.add_argument("--max-blocks", type=int, default=0, help="stop after this many published blocks (0 = run forever)")
     ap.add_argument("--dry-run", action="store_true", help="render and segment, do not upload")
@@ -216,6 +234,8 @@ def main(argv=None):
             except Exception as e:
                 log(f"cap check failed (will retry next block): {e!r}")
             shutil.rmtree(bdir, ignore_errors=True)
+        if prune_local(a.root, int(a.local_cap_gb * 1e9)):
+            log(f"local cache over {a.local_cap_gb} GB: pruned oldest work/done/failed")
         if a.max_blocks and published >= a.max_blocks:
             break
     log("stopped")
