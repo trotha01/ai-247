@@ -49,7 +49,8 @@ if [ "$CH" = lang ]; then bash "$CODE/deploy/box/lang/fetch_voices.sh" "$ROOT/vo
   echo "LANG_VOICES=$ROOT/voices"
   [ -z "$CHROMIUM" ] || echo "LANG_CHROMIUM=$CHROMIUM"
   [ -z "${NIX_LD:-}" ] || echo "NIX_LD=$NIX_LD"
-  [ -z "${NIX_LD_LIBRARY_PATH:-}" ] || echo "NIX_LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH"
+  # nix's python loads manylinux wheels (numpy, onnxruntime) only with the nix-ld library path
+  [ -z "${NIX_LD_LIBRARY_PATH:-}" ] || { echo "NIX_LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH"; echo "LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH"; }
 } > "$ROOT/$CH/env"
 cp "$CODE/deploy/box/README.channels.md" "$ROOT/README.md"
 
