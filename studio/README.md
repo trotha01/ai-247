@@ -41,7 +41,7 @@ and `worker/src` (the HLS Worker), with every R2 key under the prefix `puddle/`.
 
 ## Day-to-day (owners)
 
-One-time: copy `.env.box.example` to `.env.box` (git-ignored) and put in how you SSH to the box.
+One-time: copy `env.box.example` to `.env.box` (git-ignored) and put in how you SSH to the box.
 
 ```bash
 studio/tools/direct.sh "Leave at most one second of silence between lines"   # steer the producer
