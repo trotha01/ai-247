@@ -5,10 +5,11 @@ Research report reports/channel-pipeline-survey.org: shared swappable-node archi
 
 ## Done
 - Branch created from main.
+- Read docs/PLAN.md, docs/TOPICS.md, site/puddle-architecture.html, studio/ on studio-puddle-park (README, channel_worker, producer_loop, backdrops, install_dsh: dsh is npm @deepseek-ai/dsh 0.2.1-rc.5).
+- Drafted node contract + channel mapping (scratchpad).
 
 ## Pending
-- Read docs/PLAN.md, docs/TOPICS.md, studio/ (studio-puddle-park), site/puddle-architecture.html.
 - Survey (A)-(E) from primary sources; write report; PR; merge.
 
 ## Next step
-Read repo docs and launch the survey.
+Wait for three web-research agents (orchestration+playout, agents+realtime, Bible datasets), then write the report.
