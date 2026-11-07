@@ -11,13 +11,16 @@ export PATH=$H/node/bin:$H/dsh-global/bin:$H/bin:$PATH
 
 id show >/dev/null 2>&1 || useradd -u 1001 -M -d $SHOW -s /bin/bash show
 id gate >/dev/null 2>&1 || useradd -u 1002 -M -d /nonexistent -s /usr/sbin/nologin gate
-mkdir -p $RUN $SHOW/work $SHOW/.dsh/profiles/web
+mkdir -p $RUN
+# $SHOW belongs to the agent: root only makes the folder itself; everything inside is created by show, so a link
+# the agent plants there can never make root write somewhere else
+[ -L $SHOW ] && { echo "$SHOW is a link: refusing"; exit 1; }
+[ -d $SHOW ] || install -d -o show -g show -m 700 $SHOW
 chmod 755 $SR $SR/agents $SR/agents/skills $SR/agents/skills/showrunner
 chmod 644 $SR/agents/AGENTS.md $SR/agents/skills/showrunner/SKILL.md $SR/gate.js
 chown root:gate $SR/password && chmod 640 $SR/password
 chmod 755 $RUN
-cp $SR/profile/* $SHOW/.dsh/profiles/web/
-chown -R show:show $SHOW && chmod 700 $SHOW
+su show -c "mkdir -p $SHOW/work $SHOW/.dsh/profiles/web && cp $SR/profile/* $SHOW/.dsh/profiles/web/"
 
 # cloudflared: a pinned release, checked against its sha256 before it is ever run
 CF_VERSION=2026.10.7
