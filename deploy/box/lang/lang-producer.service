@@ -1,12 +1,13 @@
+# systemd USER unit template (deploy/box/install.sh replaces @ROOT@). Keeps lesson scripts queued ahead of the worker.
 [Unit]
-Description=Language channel producer (keeps lesson scripts queued ahead of the worker)
-After=network-online.target
+Description=Language channel producer (lesson scripts queued ahead of the worker)
 
 [Service]
-WorkingDirectory=@REPO@
-ExecStart=@HOME@/venv/bin/python -u -m lang.producer_loop --root /hyperai/home/loop/lang --target 12
+WorkingDirectory=@ROOT@/src/ai-247
+EnvironmentFile=@ROOT@/lang/env
+ExecStart=@ROOT@/venv/bin/python -u -m lang.producer_loop --root @ROOT@/lang/run --target 12
 Restart=always
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

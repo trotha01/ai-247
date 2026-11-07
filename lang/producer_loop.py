@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Producer loop for the language channel: keeps the worker's inbox TARGET lesson scripts deep, forever.
 
-    python -m lang.producer_loop --root /hyperai/home/loop/lang
+    python -m lang.producer_loop --root $CHANNELS_ROOT/lang/run
 
 Same shape as studio/pipeline/producer_loop.py (queue of finished work ahead of the worker), but no LLM: each lesson
 is lang.lesson.lesson(n), deterministic from the committed pool. The next lesson number lives in ROOT/producer/next_n,
@@ -51,7 +51,7 @@ def fill(root: Path, target: int) -> int:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--root", type=Path, default=Path("/hyperai/home/loop/lang"))
+    ap.add_argument("--root", type=Path, required=True, help="channel state folder (inbox/, done/, work/ ...)")
     ap.add_argument("--target", type=int, default=12, help="lesson scripts to keep waiting in the inbox")
     ap.add_argument("--start", type=int, default=None, help="set the next lesson number (once, at start)")
     ap.add_argument("--once", action="store_true", help="fill the inbox once and exit")
