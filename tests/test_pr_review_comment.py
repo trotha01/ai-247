@@ -8,7 +8,6 @@ was reached, never a silent pass.
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest
@@ -125,4 +124,4 @@ def test_main_updates_an_existing_sticky_comment(monkeypatch):
     monkeypatch.setattr(prc, "gh", fake)
     assert prc.main() == 0
     assert [c[:2] for c in fake.calls if c[0] != "GET"] == [("PATCH", "/repos/owner/repo/issues/comments/42")]
-    assert json.dumps(fake.calls[-1][2])  # a JSON body
+    assert fake.calls[-1][2] == {"body": prc.build("owner/repo", "7")[0]}
