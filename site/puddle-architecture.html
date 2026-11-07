@@ -62,11 +62,11 @@ const NODES=[
  ["qwen",L,56,340,36,"Qwen 3.8 27B · llama-server","one model shared by showrunner, engineer and scene writer",{
   role:"The one local LLM. llama.cpp serves the GGUF on the GPU with a shared 32k KV pool across 4 slots, so the producer's short requests and one long agent conversation fit together.",
   runs:"GPU box, local OpenAI-compatible API",
-  trigger:"Started by hand after a box restart: box/run_llama.sh (no boot script yet).",
+  trigger:"Started on the box by box/run_llama.sh; serves requests as they arrive.",
   in:"Prompts from the showrunner, engineer and scene writer",
   out:"Chat replies; scene JSON constrained by a JSON schema",
   files:["studio/box/run_llama.sh","studio/showrunner/profile/cordis.patch.yml","studio/engineer/profile/cordis.patch.yml"],
-  model:"Qwen3.8-27B-Uncensored IQ4_XS GGUF + f16 mmproj (image input), llama.cpp, -c 32768 -np 4 --kv-unified"}],
+  model:"Qwen 3.8 27B, quantized GGUF with image input, on llama.cpp"}],
  ["show",L,124,W,H,"Showrunner agent","dsh web · owner-only",{
   role:"The agent the owner chats with on the private studio page. It watches what is on air and steers the channel only through the channel command: standing directions, image orders, and requests for new puppet actions.",
   runs:"GPU box, sandboxed, behind the studio page",
@@ -85,7 +85,7 @@ const NODES=[
   model:"Qwen 3.8 27B via dsh headless; owner approval gate"}],
  ["chan",L,214,W,H,"Channel service","channel serve",{
   role:"The only door agents have into the channel. A privileged local service checks who is calling on every request: the showrunner may direct, order and propose, the engineer may submit, the studio page may only read. Approve, reject and retire are owner-only.",
-  runs:"GPU box, kept up by box/run_channel_service.sh (restarts within 2 s)",
+  runs:"GPU box, kept up by box/run_channel_service.sh",
   trigger:"A channel command from an agent, the studio page, or an owner (tools/direct.sh, tools/approve.sh).",
   in:"Commands from the showrunner, engineer and studio page; owner approvals",
   out:"producer/directions/, proposals/, library orders; approve copies action.py into actions/live/",
