@@ -6,6 +6,8 @@
   var statusEl = document.getElementById("status");
   var stateEl = document.getElementById("state");
   var hls = null, lastTime = -1, lastProgress = Date.now(), url = "", started = false;
+  var retryTimer = null;     // the one pending reload attempt
+  var starts = 0;            // start() calls so far; exposed on <body data-starts> for the e2e test
 
   function setState(s, msg) {
     stateEl.textContent = s;
@@ -34,11 +36,18 @@
   function fail(reason) {
     teardown();
     setState(reason === "stalled" ? "stalled" : "offline", OFFLINE_MSG);
-    setTimeout(start, RETRY_MS);
+    // Report a stall once and keep a single pending retry. Before this, `started` stayed true after a stall, so the
+    // 1 s check below called fail() again on every tick until the retry fired, each call queuing another start():
+    // a pile-up of Hls instances and reload attempts (the same could happen with repeated fatal hls.js errors).
+    started = false; lastProgress = Date.now();
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(function () { retryTimer = null; start(); }, RETRY_MS);
   }
 
   function start() {
     if (!url) { setState("offline", OFFLINE_MSG); return; }
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    starts += 1; document.body.dataset.starts = starts;
     teardown();
     setState("connecting");
     lastTime = -1; lastProgress = Date.now(); started = false;
