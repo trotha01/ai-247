@@ -1,0 +1,20 @@
+# Puddle Park stream: Trevor's Worker code from this repo (worker/src), unchanged, deployed with the puddle/ prefix.
+# Puddle Park test channel: Trevor's ai-247 live-stream Worker (worker/src, unchanged) on our own Cloudflare account.
+name = "aitv-live"
+main = "../../../worker/src/index.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "aitv-media"
+
+[vars]
+# Each channel lives under its own prefix in the bucket: puddle/manifest.json, puddle/<blocks>/seg_NNN.ts, puddle/pool/...
+PREFIX = "puddle/"
+WINDOW = "5"
+EPOCH = "1793000000"
+POOL_KEY = "pool/manifest.json"
+# The channel publishes every few minutes: fail over to the replay pool if the live manifest is 30 min old.
+MAX_MANIFEST_AGE_S = "1800"
+CHECK_SEGMENTS = "5"
+FAILOVER_MIN_S = "30"
