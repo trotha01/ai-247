@@ -34,6 +34,7 @@ import re
 import shutil
 import struct
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -335,39 +336,88 @@ def actions(args):
         print(f"- {meta.get('PARAMS', meta.get('ACTION'))}: {meta.get('DESCRIPTION', '')}")
 
 
+ENG_WORK = "/output/eng/work"
+
+
+def read_eng_file(parts, name, max_bytes=8_000_000) -> bytes:
+    """Read a file the engineer made, safely for a root process: every folder and the file are opened with
+    O_NOFOLLOW (no link anywhere on the way), the file must be a regular file owned by eng, and the bytes come from
+    that one open handle, so swapping files between a check and a copy cannot redirect the read."""
+    flags_dir = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(ENG_WORK, flags_dir)
+    try:
+        for part in parts:
+            nfd = os.open(part, flags_dir, dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+        f = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    finally:
+        os.close(fd)
+    try:
+        st = os.fstat(f)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != pwd.getpwnam("eng").pw_uid or st.st_size > max_bytes:
+            raise ValueError(f"{name}: not a regular file of the engineer's")
+        chunks = []
+        while True:
+            c = os.read(f, 1 << 20)
+            if not c:
+                break
+            chunks.append(c)
+        return b"".join(chunks)
+    finally:
+        os.close(f)
+
+
+def action_meta_text(text):
+    """action_meta for source text (submit reads the file once and checks those same bytes)."""
+    import ast
+    tree = ast.parse(text)
+    meta = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id in ("ACTION", "DESCRIPTION", "NEEDS", "PARAMS"):
+                meta[node.targets[0].id] = ast.literal_eval(node.value)
+    return meta, any(isinstance(n, ast.FunctionDef) and n.name == "run" for n in tree.body)
+
+
 def submit(args):
     if len(args) != 2:
         sys.exit("submit ID FILE.py")
-    pid, src = args[0], Path(args[1])
-    eng_root = Path("/output/eng/work").resolve()
-
-    def inside(f):  # a real file inside the engineer's work folder: no links, nothing else on the machine
-        return f.exists() and not f.is_symlink() and f.is_file() and eng_root in f.resolve().parents
-
-    if not inside(src):
-        sys.exit(f"not submitted: {src} must be a file in {eng_root}")
+    pid, src = args[0], args[1]
+    # the path is only used to name folders inside the engineer's work folder; nothing is resolved or followed
+    if not src.startswith(ENG_WORK + "/") or not src.endswith(".py"):
+        sys.exit(f"not submitted: {src} must be a .py file in {ENG_WORK}")
+    *parts, name = src[len(ENG_WORK) + 1:].split("/")
+    if not parts or any(p in ("", ".", "..") for p in parts + [name]):
+        sys.exit(f"not submitted: {src} must be a .py file in a request folder in {ENG_WORK}")
     d = _load(pid)
     if d["status"] not in ("building", "new", "rejected", "failed"):
         sys.exit(f"{pid} is {d['status']}, not open for submission")
-    meta, has_run = action_meta(src)
+    try:
+        code = read_eng_file(parts, name)
+        grid = read_eng_file(parts, "review.jpg")
+    except FileNotFoundError:
+        sys.exit("not submitted: run eng-test first; it leaves review.jpg next to the action")
+    except (OSError, ValueError) as e:
+        sys.exit(f"not submitted: {e}")
+    meta, has_run = action_meta_text(code.decode("utf-8", errors="replace"))
     missing = [k for k in ("ACTION", "DESCRIPTION", "NEEDS", "PARAMS") if k not in meta] + ([] if has_run else ["run()"])
     if missing:
         sys.exit("not submitted, the file is missing: " + ", ".join(missing))
-    name = meta["ACTION"]
-    if name != _slug(name) or name in BUILTIN_ACTIONS:
-        sys.exit(f"not submitted: ACTION must be a new lowercase_name, not {name!r}")
-    grid = src.parent / "review.jpg"
-    if not inside(grid):
-        sys.exit(f"not submitted: run eng-test first; it leaves review.jpg next to {src.name}")
+    action_name = meta["ACTION"]
+    if action_name != _slug(action_name) or action_name in BUILTIN_ACTIONS:
+        sys.exit(f"not submitted: ACTION must be a new lowercase_name, not {action_name!r}")
     dst = PROPOSALS / pid
-    shutil.copy(src, dst / "action.py")
-    shutil.copy(grid, dst / "review.jpg")
+    (dst / "action.py").write_bytes(code)
+    (dst / "review.jpg").write_bytes(grid)
     for extra in ("test_scene.json", "notes.md"):
-        if inside(src.parent / extra):
-            shutil.copy(src.parent / extra, dst / extra)
-    d.update(status="ready", action=name, reason=None)
-    _save(d, f"submitted action {name}")
-    print(f"submitted {name}: waiting for an owner to approve. Preview: {dst / 'review.jpg'}")
+        try:
+            (dst / extra).write_bytes(read_eng_file(parts, extra, max_bytes=200_000))
+        except (OSError, ValueError):
+            pass
+    d.update(status="ready", action=action_name, reason=None)
+    _save(d, f"submitted action {action_name}")
+    print(f"submitted {action_name}: waiting for an owner to approve. Preview: {dst / 'review.jpg'}")
 
 
 def approve(args):
@@ -465,8 +515,25 @@ def handle(conn):
             print(time.strftime("%H:%M:%S"), "request dropped:", repr(e)[:200], flush=True)
 
 
+IMPORT_DIRS = ["/hyperai/home/kids-test/blender", "/hyperai/home/ai-247", "/hyperai/home/ai-247/newsbot"]
+
+
+def check_imports():
+    """The service runs as root and imports code from these folders: refuse to serve if any of them, or any .py
+    file in them, is not root-owned or is writable by group or others."""
+    bad = []
+    for d in IMPORT_DIRS:
+        for f in [Path(d)] + sorted(Path(d).glob("*.py")):
+            st = f.lstat()
+            if st.st_uid != 0 or st.st_mode & 0o022 or stat.S_ISLNK(st.st_mode):
+                bad.append(str(f))
+    if bad:
+        sys.exit("refusing to serve: code the root service imports is not root-only: " + ", ".join(bad[:5]))
+
+
 def serve(_):
     """Root-side service: one JSON request {argv} per connection, answers {code, out}. Threads per request."""
+    check_imports()
     import threading
     global RUN_LOCK, NO_LOCK
     RUN_LOCK, NO_LOCK = threading.Lock(), contextlib.nullcontext()

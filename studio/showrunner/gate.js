@@ -50,12 +50,23 @@ function launchToken() {
 // lockout: 10 wrong passwords from one address in 10 minutes blocks it for the rest of the window
 const fails = new Map();
 function clientIp(req) { return req.headers["cf-connecting-ip"] || req.socket.remoteAddress; }
+// and a gate-wide limit, so guessing spread over many addresses is slowed too: 30 wrong passwords in 10 minutes,
+// from anywhere, close the login for the rest of that window (a short password is the owners' choice; this is
+// what makes it costly to guess)
+let globalFails = { n: 0, since: Date.now() };
+function globallyLocked() {
+  if (Date.now() - globalFails.since > 600000) globalFails = { n: 0, since: Date.now() };
+  return globalFails.n >= 30;
+}
 function locked(ip) {
+  if (globallyLocked()) return true;
   const f = fails.get(ip);
   if (!f || Date.now() - f.since > 600000) { fails.delete(ip); return false; }
   return f.n >= 10;
 }
 function failed(ip) {
+  globallyLocked();
+  globalFails.n++;
   const f = fails.get(ip);
   if (!f || Date.now() - f.since > 600000) fails.set(ip, { n: 1, since: Date.now() });
   else f.n++;

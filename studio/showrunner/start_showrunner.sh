@@ -19,8 +19,12 @@ chmod 755 $RUN
 cp $SR/profile/* $SHOW/.dsh/profiles/web/
 chown -R show:show $SHOW && chmod 700 $SHOW
 
-if [ ! -x $H/bin/cloudflared ]; then
-  curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o $H/bin/cloudflared.tmp
+# cloudflared: a pinned release, checked against its sha256 before it is ever run
+CF_VERSION=2026.10.7
+CF_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872
+if ! echo "$CF_SHA256  $H/bin/cloudflared" | sha256sum -c --status 2>/dev/null; then
+  curl -sL https://github.com/cloudflare/cloudflared/releases/download/$CF_VERSION/cloudflared-linux-amd64 -o $H/bin/cloudflared.tmp
+  echo "$CF_SHA256  $H/bin/cloudflared.tmp" | sha256sum -c --status || { echo "cloudflared checksum mismatch"; rm -f $H/bin/cloudflared.tmp; exit 1; }
   chmod 755 $H/bin/cloudflared.tmp && mv $H/bin/cloudflared.tmp $H/bin/cloudflared
 fi
 
