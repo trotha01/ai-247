@@ -1,0 +1,24 @@
+# The showrunner's model: Qwen 3.8 27B on this box's llama-server (shared with the producer loop).
+- id: llm-pi-ai
+  config:
+    providers:
+      box:
+        displayName: GPU box
+        apiKeyEnv: LLAMA_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:8080/v1
+        compat:
+          supportsDeveloperRole: false
+          maxTokensField: max_tokens
+          thinkingFormat: deepseek
+        models:
+          - id: qwen3.8-uncensored
+            name: Qwen 3.8 27B
+            contextWindow: 32768
+            maxTokens: 16384
+            input: [ text, image ]
+
+- id: agent-default-model
+  config:
+    provider: box
+    model: qwen3.8-uncensored
