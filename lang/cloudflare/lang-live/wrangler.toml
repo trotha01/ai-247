@@ -1,0 +1,21 @@
+# Language channel stream (Latin / Greek / Hebrew lessons): this repo's Worker code (worker/src), unchanged, deployed
+# with the lang/ prefix as its own Worker. Deployed ONLY by .github/workflows/deploy-lang.yml (gated on the repository
+# variable LANG_DEPLOY_ENABLED). Shared bucket ai247-media: ai-247 owns the root, Puddle Park puddle/, this channel lang/.
+name = "lang-live"
+main = "../../../worker/src/index.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ai247-media"
+
+[vars]
+# lang/manifest.json, lang/bulletins/<ts>/seg_NNN.ts, lang/pool/manifest.json
+PREFIX = "lang/"
+WINDOW = "5"
+EPOCH = "1793000000"
+POOL_KEY = "pool/manifest.json"
+# The live manifest itself loops fresh + up to 30 earlier lessons; fall back to the replay pool if no new block for 6 h.
+MAX_MANIFEST_AGE_S = "21600"
+CHECK_SEGMENTS = "5"
+FAILOVER_MIN_S = "30"
