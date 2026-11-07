@@ -56,38 +56,38 @@ footer{margin-top:22px;font-size:13px;color:var(--muted)}
 "use strict";
 // Layout: two columns (L, R) inside three bands. Coordinates are SVG user units on a 368-wide canvas.
 const L=14,R=208,W=146,H=52;
-const LANES=[["g",36,520,"RENTED GPU BOX (HYPERAI, 1× RTX 3090)"],["c",568,194,"CLOUDFLARE"],["b",778,104,"BROWSER"]];
+const LANES=[["g",36,520,"RENTED GPU BOX (1× RTX 3090)"],["c",568,194,"CLOUDFLARE"],["b",778,104,"BROWSER"]];
 // id, x, y, w, h, title, subtitle, panel details
 const NODES=[
- ["qwen",L,56,340,36,"Qwen 3.8 27B · llama-server :8080","one model shared by showrunner, engineer and scene writer",{
+ ["qwen",L,56,340,36,"Qwen 3.8 27B · llama-server","one model shared by showrunner, engineer and scene writer",{
   role:"The one local LLM. llama.cpp serves the GGUF on the GPU with a shared 32k KV pool across 4 slots, so the producer's short requests and one long agent conversation fit together.",
-  runs:"GPU box, 127.0.0.1:8080 (OpenAI-compatible API)",
+  runs:"GPU box, local OpenAI-compatible API",
   trigger:"Started by hand after a box restart: box/run_llama.sh (no boot script yet).",
   in:"Prompts from the showrunner, engineer and scene writer",
   out:"Chat replies; scene JSON constrained by a JSON schema",
   files:["studio/box/run_llama.sh","studio/showrunner/profile/cordis.patch.yml","studio/engineer/profile/cordis.patch.yml"],
   model:"Qwen3.8-27B-Uncensored IQ4_XS GGUF + f16 mmproj (image input), llama.cpp, -c 32768 -np 4 --kv-unified"}],
- ["show",L,124,W,H,"Showrunner agent","dsh web · gate.js password",{
-  role:"The agent people chat with on the studio page. It watches what is on air and steers the channel only through the channel command: standing directions, image orders, and requests for new puppet actions.",
-  runs:"GPU box as Linux user show: dsh web on :3081 behind gate.js on :3080 (user gate), exposed by a Cloudflare quick tunnel",
-  trigger:"A chat message from the studio page. Started by showrunner/start_showrunner.sh, which also writes the new tunnel address to R2.",
-  in:"Chat through the password gate (one shared password, signed 30-day cookie, 10 misses in 10 min locks an address)",
-  out:"channel direct / order / propose; showrunner/url.txt to R2 on start",
+ ["show",L,124,W,H,"Showrunner agent","dsh web · owner-only",{
+  role:"The agent the owner chats with on the private studio page. It watches what is on air and steers the channel only through the channel command: standing directions, image orders, and requests for new puppet actions.",
+  runs:"GPU box, sandboxed, behind the studio page",
+  trigger:"A chat message from the studio page. Started by showrunner/start_showrunner.sh, which also publishes the studio address to R2.",
+  in:"Owner chat from the studio page",
+  out:"channel direct / order / propose; the studio address to R2 on start",
   files:["studio/showrunner/start_showrunner.sh","studio/showrunner/gate.js","studio/showrunner/agents/AGENTS.md","studio/showrunner/agents/skills/showrunner/SKILL.md","studio/showrunner/profile/cordis.patch.yml"],
   model:"Qwen 3.8 27B via dsh (DeepSeek harness), web profile"}],
  ["eng",R,124,W,H,"Engineer agent","dsh headless · eng-test",{
   role:"Turns a request such as \"Wren should spin\" into a plug-in puppet action. A builder writes and test-renders it off air with eng-test; a fresh reviewer looks at the frames and submits it or sends it back. Nothing airs until an owner approves.",
-  runs:"GPU box as Linux user eng (no secrets, own folder only)",
+  runs:"GPU box, sandboxed (no secrets, own folder only)",
   trigger:"engineer_loop.py polls proposals/ every 20 s and takes the oldest request with status new.",
   in:"Requests filed by the showrunner (status new)",
   out:"channel submit ID action.py (status ready). The owner then runs tools/approve.sh.",
   files:["studio/engineer/engineer_loop.py","studio/engineer/eng-test","studio/engineer/agents/skills/action-engineer/SKILL.md","studio/engineer/examples/jump_for_joy.py","studio/tools/approve.sh"],
   model:"Qwen 3.8 27B via dsh headless; owner approval gate"}],
- ["chan",L,214,W,H,"Channel service","channel serve (root)",{
-  role:"The only door agents have into the channel. A root-side Unix-socket service checks the caller's Linux user on every request (ALLOWED): the showrunner may direct, order and propose, the engineer may submit, the studio page may only read. Approve, reject and retire need root, which means an owner's SSH key.",
-  runs:"GPU box as root, kept up by box/run_channel_service.sh (restarts within 2 s)",
-  trigger:"A channel command from an agent, the studio page, or an owner over SSH (tools/direct.sh, tools/approve.sh).",
-  in:"Commands from show, eng and gate; owner approvals",
+ ["chan",L,214,W,H,"Channel service","channel serve",{
+  role:"The only door agents have into the channel. A privileged local service checks who is calling on every request: the showrunner may direct, order and propose, the engineer may submit, the studio page may only read. Approve, reject and retire are owner-only.",
+  runs:"GPU box, kept up by box/run_channel_service.sh (restarts within 2 s)",
+  trigger:"A channel command from an agent, the studio page, or an owner (tools/direct.sh, tools/approve.sh).",
+  in:"Commands from the showrunner, engineer and studio page; owner approvals",
   out:"producer/directions/, proposals/, library orders; approve copies action.py into actions/live/",
   files:["studio/showrunner/channel","studio/box/run_channel_service.sh","studio/tools/direct.sh","studio/tools/approve.sh","studio/tools/box.sh"],
   model:"None (Python)"}],
@@ -101,7 +101,7 @@ const NODES=[
   model:"Qwen 3.8 27B, temperature 0.85, json_schema response format, thinking off"}],
  ["moss",L,304,W,H,"MOSS backdrops","backdrops.py · ComfyUI",{
   role:"Paints panoramic backdrops (1792×512) and title cards once, on order, and keeps them in a library for reuse. ComfyUI is started for a short window and stopped again to give the GPU back.",
-  runs:"GPU box, ComfyUI on 127.0.0.1:8188, text encoder on the CPU, model in low-VRAM mode",
+  runs:"GPU box, ComfyUI, text encoder on the CPU, model in low-VRAM mode",
   trigger:"The channel worker opens a window after a block, when orders are pending and 600 s have passed; 3 images per window.",
   in:"Image orders from the scene writer (and the showrunner's channel order)",
   out:"PNG backdrops and title cards in library/",
@@ -115,8 +115,8 @@ const NODES=[
   out:"scene.voiced.json (timings, mouth envelopes) and voices.wav",
   files:["studio/engine/voice.py"],
   model:"Kokoro v1.0 int8 ONNX (kokoro_onnx), voices-v1.0.bin"}],
- ["blender",L,394,W,H,"Blender animation","puddle.py, user render",{
-  role:"Builds the felt set and four puppets from code and animates the voiced scene, including approved plug-in actions. Renders run as the unprivileged user render because plug-in actions are AI-written code.",
+ ["blender",L,394,W,H,"Blender animation","puddle.py (headless)",{
+  role:"Builds the felt set and four puppets from code and animates the voiced scene, including approved plug-in actions. Renders run sandboxed because plug-in actions are AI-written code.",
   runs:"GPU box, headless Blender (-b), 4 renders at once on the live box",
   trigger:"The channel worker's render_clip, right after the voice pass.",
   in:"scene.voiced.json, backdrops and cards from the library, actions/live/ (PUDDLE_ACTIONS)",
@@ -133,19 +133,19 @@ const NODES=[
   model:"ffmpeg (libx264 + AAC)"}],
  ["pub",R,484,W,H,"Publish","newsbot/publish.py",{
   role:"ai-247's own uploader, reused unchanged through a prefixing S3 wrapper. Uploads segments first and the root manifest.json last, keeps earlier blocks as replays, and sets swap timing per MANIFEST-SWAP. Afterwards the worker deletes the oldest unreferenced blocks to stay under 8 GB.",
-  runs:"GPU box, inside channel_worker.py (R2 keys readable by root only)",
+  runs:"GPU box, inside channel_worker.py",
   trigger:"Each finished block.",
   in:"The block directory",
   out:"PUTs under puddle/: block segments, then puddle/manifest.json",
   files:["newsbot/publish.py","newsbot/channel.py","newsbot/r2.py","docs/MANIFEST-SWAP.md","docs/R2_LAYOUT.md"],
   model:"boto3 S3 API to R2"}],
- ["r2",L,604,W,H,"R2 bucket","aitv-media · puddle/",{
-  role:"Object storage for the stream: the live manifest, every block's segments and the replay pool under puddle/, plus the showrunner's current tunnel address at showrunner/url.txt.",
+ ["r2",L,604,W,H,"R2 bucket","prefix puddle/",{
+  role:"Object storage for the stream: the live manifest, every block's segments and the replay pool under puddle/, plus the current studio address.",
   runs:"Cloudflare R2",
   trigger:"Written by Publish and start_showrunner.sh; read on every playlist and link request.",
-  in:".ts segments and manifests; showrunner/url.txt",
+  in:".ts segments and manifests; the studio address",
   out:"Objects read by the two Workers",
-  files:["studio/cloudflare/aitv-live/wrangler.toml","docs/R2_LAYOUT.md"],
+  files:["docs/R2_LAYOUT.md"],
   model:"None"}],
  ["wk",R,604,W,H,"Worker playlist","aitv-live · worker/src",{
   role:"This repo's Worker deployed unchanged with PREFIX=puddle/. Builds a sliding-window live HLS playlist from the manifest, checks that upcoming segments exist, proxies segments, and fails over to the replay pool when the manifest is 30 min old.",
@@ -155,19 +155,19 @@ const NODES=[
   out:"live.m3u8 and proxied .ts segments",
   files:["worker/src/index.js","worker/src/playlist.js","worker/src/channel.js","worker/src/failover.js","studio/cloudflare/aitv-live/wrangler.toml"],
   model:"None (WINDOW 5, MAX_MANIFEST_AGE_S 1800, CHECK_SEGMENTS 5)"}],
- ["link",L,694,W,H,"Showrunner link","showrunner Worker",{
-  role:"A fixed address for the studio. The quick-tunnel address changes on every restart, so this Worker reads the current one from R2 and redirects, or says the showrunner is offline.",
-  runs:"Cloudflare Worker showrunner (workers.dev)",
+ ["link",L,694,W,H,"Showrunner link","redirect Worker",{
+  role:"A fixed address for the studio. The studio's address changes on every restart, so this Worker reads the current one from R2 and redirects, or says the showrunner is offline.",
+  runs:"Cloudflare Worker",
   trigger:"A visitor opening the studio link.",
-  in:"showrunner/url.txt from R2",
-  out:"302 redirect to the trycloudflare.com tunnel, or a 503 offline page",
+  in:"Studio address from R2",
+  out:"Redirect to the studio, or an offline page",
   files:["studio/cloudflare/showrunner-link/src/index.js","studio/cloudflare/showrunner-link/wrangler.toml"],
   model:"None"}],
- ["studio",L,812,W,H,"Studio page","password · chat",{
-  role:"The owners' and guests' page, served by gate.js through the tunnel: the live channel, the standing directions, the latest scenes, new-action requests and the showrunner chat on one screen.",
-  runs:"Browser (page and chat served from the GPU box via the tunnel)",
-  trigger:"Opening the showrunner link and entering the password.",
-  in:"302 from the link; status JSON from gate.js",
+ ["studio",L,812,W,H,"Studio page","owner only · chat",{
+  role:"The owner's private page, served from the GPU box: the live channel, the standing directions, the latest scenes, new-action requests and the showrunner chat on one screen.",
+  runs:"Browser (page and chat served from the GPU box)",
+  trigger:"The owner opening the showrunner link and signing in.",
+  in:"Redirect from the link; status JSON from the studio server",
   out:"Chat messages to the showrunner",
   files:["studio/showrunner/gate.js"],
   model:"None"}],
@@ -197,10 +197,10 @@ const EDGES=[
  ["enc","pub","M281,446 L281,484",["6 s .ts + block manifest"],275,469,"end"],
  ["pub","r2","M214,536 L154,604",["PUT puddle/ (manifest last)"],184,568,"middle"],
  ["r2","wk","M160,642 L208,642",["manifest","+ .ts"],184,621,"middle"],
- ["r2","link","M87,656 L87,694",["showrunner/url.txt"],93,679,"start"],
+ ["r2","link","M87,656 L87,694",["studio address"],93,679,"start"],
  ["wk","player","M281,656 L281,812",["live.m3u8 + .ts"],287,740,"start"],
- ["link","studio","M87,746 L87,812",["302 to tunnel"],93,784,"start"],
- ["studio","show","M14,838 L7,838 L7,150 L14,150",["chat · password · quick tunnel"],7,500,"middle",1,-90]
+ ["link","studio","M87,746 L87,812",["redirect"],93,784,"start"],
+ ["studio","show","M14,838 L7,838 L7,150 L14,150",["owner chat"],7,500,"middle",1,-90]
 ];
 const NS="http://www.w3.org/2000/svg",svg=document.getElementById("graph");
 const el=(t,a,txt)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e;};
@@ -230,7 +230,7 @@ NODES.forEach(([id,x,y,w,h,title,sub,info])=>{
   svg.appendChild(g);
 });
 const P=document.getElementById("panel");
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const REPO="https://github.com/trotha01/ai-247/blob/";
 const href=f=>REPO+(f.startsWith("studio/")?"studio-puddle-park/":"main/")+f;
 function show(id){
