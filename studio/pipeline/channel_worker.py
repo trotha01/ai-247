@@ -55,6 +55,7 @@ CARD_S = 2.0
 
 def render_clip(scene_path: Path, work: Path) -> Path:
     """voices -> Blender frames -> clip.mp4 (720p30, AAC 48 kHz stereo, closed 2 s GOP); a title card goes in front."""
+    work = Path(work).resolve()
     work.mkdir(parents=True, exist_ok=True)
     sc0 = json.loads(scene_path.read_text())
     card = None
@@ -67,28 +68,45 @@ def render_clip(scene_path: Path, work: Path) -> Path:
     scene_path.write_text(json.dumps(sc0))
     subprocess.run([PY, str(HERE / "voice.py"), str(scene_path), str(work)], check=True,
                    stdout=open(work / "voice.txt", "w"), stderr=subprocess.STDOUT)
-    # Blender runs as the unprivileged user "render": approved plug-in actions are AI-written code, so they get no
-    # access to keys or the channel's files, only this scene's work folder. Time-limited so a bad plug-in cannot hang.
-    subprocess.run(["chown", "-R", "render", str(work)], check=True)
-    env = {**os.environ, "HOME": "/tmp/render-home", "PUDDLE_ACTIONS": str(ACTIONS_LIVE)}
-    subprocess.run([BL, "-b", "--python", str(HERE / "puddle.py"), "--", str(work / "scene.voiced.json"), str(work)],
-                   check=True, stdout=open(work / "blender.log", "w"), stderr=subprocess.STDOUT, user="render",
-                   env=env, timeout=600)
+    # Blender runs as the unprivileged user "render" because approved plug-in actions are AI-written code:
+    # - a clean environment (the worker's own holds the R2 keys), time-limited so a bad plug-in cannot hang;
+    # - it reads the scene and voices from this root-owned folder and may write only to work/render;
+    # - afterwards that folder is taken back (root-owned, so nothing the render left running can swap files) and only
+    #   regular frame files, no links, are passed on to ffmpeg.
+    rdir = work / "render"
+    rdir.mkdir()
+    shutil.chown(rdir, "render")
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp/render-home", "LANG": "C.UTF-8",
+           "PUDDLE_ACTIONS": str(ACTIONS_LIVE)}
+    try:
+        subprocess.run([BL, "-b", "--python", str(HERE / "puddle.py"), "--", str(work / "scene.voiced.json"), str(rdir)],
+                       check=True, stdout=open(work / "blender.log", "w"), stderr=subprocess.STDOUT, user="render",
+                       env=env, timeout=600, cwd=str(rdir))
+    finally:
+        subprocess.run(["chown", "-R", "-P", "root:root", str(rdir)], check=False)
+        os.chmod(rdir, 0o755)
+    fdir = rdir / "frames"
+    if fdir.is_symlink() or not fdir.is_dir():
+        raise RuntimeError("render left no frames folder")
+    frames = sorted(fdir.iterdir())
+    bad = [f.name for f in frames if f.is_symlink() or not f.is_file()]
+    if bad or not frames:
+        raise RuntimeError(f"render output rejected (links or non-files: {bad[:3]})" if bad else "render made no frames")
     sc = json.loads((work / "scene.voiced.json").read_text())
     fps = int(sc.get("fps", 24))
     step = int(sc.get("step", 2 if sc.get("on_twos") else 1))
     seconds = float(sc.get("seconds", 15))
-    ext = sorted((work / "frames").iterdir())[0].suffix
+    ext = frames[0].suffix
     out = work / "clip.mp4"
     subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y",
-                    "-framerate", str(fps / step), "-pattern_type", "glob", "-i", str(work / "frames" / f"*{ext}"),
+                    "-framerate", str(fps / step), "-pattern_type", "glob", "-i", str(fdir / f"*{ext}"),
                     "-i", str(work / "voices.wav"),
                     "-vf", f"fps={FPS_OUT},scale=1280:720,format=yuv420p", "-t", str(seconds),
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-g", str(FPS_OUT * 2),
                     "-keyint_min", str(FPS_OUT * 2), "-sc_threshold", "0",
                     "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k", "-af", "apad", "-shortest", str(out)],
                    check=True)
-    shutil.rmtree(work / "frames", ignore_errors=True)
+    shutil.rmtree(rdir, ignore_errors=True)
     if card:
         out = add_card(card, out, work / "clip_card.mp4")
     return out

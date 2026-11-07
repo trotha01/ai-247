@@ -121,10 +121,17 @@ class Library:
                     made += 1
                     log(f"made {r['kind']} '{r['name']}' in {time.time() - t:.0f}s")
                 except Exception as e:
-                    log(f"FAILED {r['name']}: {e!r}"[:300])
+                    # a transient ComfyUI error should not lose the order: retry in later windows, give up after 3
+                    tries = int(r.get("tries", 0)) + 1
                     p = self.req / f"{r['name']}.json"
+                    log(f"FAILED {r['name']} (try {tries}/3): {e!r}"[:300])
                     if p.exists():
-                        p.rename(self.failed / p.name)
+                        if tries >= 3:
+                            p.rename(self.failed / p.name)
+                        else:
+                            tmp = p.with_suffix(".tmp")
+                            tmp.write_text(json.dumps({**r, "tries": tries}))
+                            tmp.rename(p)
                 if time.time() - t0 > timeout_s:
                     break
         finally:
