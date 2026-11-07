@@ -1,1 +1,1 @@
-{"state": "running", "msg": "PR #52 open (architecture v2 + CI render check); waiting on tests, worker-site-e2e, claude-review"}
+{"state": "running", "msg": "PR #52: merged main (#49 deploy guard, #51 trims) into v2, scrubbed operational details, CI re-running"}

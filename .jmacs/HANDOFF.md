@@ -10,11 +10,12 @@ AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, write
 
 - v2 page committed: separate lanes, Qwen llama-server and channel service nodes, Runs on / Triggered by per node, file links to GitHub; README link.
 - site/test/e2e-architecture.js (light 1100 px, dark 360 px; overlaps, panels, scroll, errors, named paths exist) passes locally; added to worker-site-e2e with screenshots as an artifact.
-- PR #52 opened, subscribed to its activity.
+- PR #52 opened, subscribed to its activity. First CI run green (tests, worker-site-e2e, claude-review: 0 blocking; replied to its 4 optional findings in one PR comment).
+- Merge conflict with main: Trevor's PR #51 trimmed operational details (password-gate mechanics, tunnel, ports, bucket/key names, run-as users) and PR #49 added tests/test_deploy_guard.py (no workflow line may mention studio). Merged main, kept v2's layout with #51's trims applied to all new text, dropped the CI fetch of the Puddle Park branch (those paths are checked locally only).
 
 ## Pending
 - PR #52 checks (tests, worker-site-e2e, claude-review), then squash-merge; confirm the page on https://ai-247.pages.dev/puddle-architecture.html after the Pages deploy.
 - jmacs todo-status done with the page URL (jmacs is not installed in cloud sessions; the orchestrator applies it from status.json).
 
 ## Next step
-Wait for PR #52 checks and review; fix anything red; merge.
+Wait for PR #52 checks on the merge commit; fix anything red; squash-merge; check the live page; set status done.
