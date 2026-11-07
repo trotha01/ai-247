@@ -29,7 +29,7 @@ CODE=$ROOT/src/ai-247
 # 3. tools: ffmpeg + Chromium (nix when present, else what the system has / Playwright's own Chromium)
 CHROMIUM=""
 if command -v nix > /dev/null; then
-  nix --extra-experimental-features 'nix-command flakes' build nixpkgs#ffmpeg-headless --out-link "$ROOT/tools/ffmpeg"
+  nix --extra-experimental-features 'nix-command flakes' build nixpkgs#ffmpeg-headless.bin --out-link "$ROOT/tools/ffmpeg"
   nix --extra-experimental-features 'nix-command flakes' build nixpkgs#chromium --out-link "$ROOT/tools/chromium"
   TOOLPATH=$ROOT/tools/ffmpeg/bin; CHROMIUM=$ROOT/tools/chromium/bin/chromium
 else
