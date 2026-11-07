@@ -18,6 +18,7 @@
   channel propose "TITLE" "WHAT IT SHOULD DO"   file a request for a new action (showrunner)
   channel proposals                             requests and their status: new, building, ready, live, rejected, failed
   channel actions                               approved plug-in actions the producer can use now
+  channel proposal ID                           one request in full: text, history, engineer's notes and its code
   channel submit ID FILE.py                     hand a finished, tested action in for review (engineer)
   channel approve ID | reject ID "WHY" | retire ACTION    owners only, from a root login on the box
 
@@ -47,7 +48,7 @@ PROPOSALS = ROOT / "proposals"
 ACTIONS_LIVE = ROOT / "actions" / "live"
 BUILTIN_ACTIONS = {"shot", "say", "hop", "move", "wave", "point", "look", "spawn", "bounce", "eat", "numeral"}
 # who may run what through the service (root runs anything directly on the box)
-READ = {"status", "recent", "scene", "frames", "notes", "brief", "library", "logs", "proposals", "actions"}
+READ = {"status", "recent", "scene", "frames", "notes", "brief", "library", "logs", "proposals", "actions", "proposal"}
 ALLOWED = {
     "show": READ | {"direct", "unnote", "order", "restart", "propose"},
     "eng": READ | {"submit"},
@@ -297,6 +298,16 @@ def proposals(args):
         print(f"- [{d['status']}] {d['id']}: {d['title']}{extra}")
 
 
+def proposal(args):
+    d = _load(args[0])
+    print(f"{d['id']} [{d['status']}]: {d['title']}\n\nWhat it should do: {d['what']}\n")
+    print("History:\n  " + "\n  ".join(d.get("history", [])))
+    for name in ("notes.md", "action.py"):
+        f = PROPOSALS / d["id"] / name
+        if f.exists():
+            print(f"\n----- {name}\n{f.read_text()}")
+
+
 def actions(args):
     files = sorted(ACTIONS_LIVE.glob("*.py")) if ACTIONS_LIVE.exists() else []
     if not files:
@@ -367,7 +378,7 @@ def retire(args):
 
 CMDS = {"status": status, "recent": recent, "scene": scene, "frames": frames, "direct": direct, "notes": notes,
         "unnote": unnote, "brief": brief, "library": library, "order": order, "logs": logs, "restart": restart,
-        "propose": propose, "proposals": proposals, "actions": actions, "submit": submit, "approve": approve,
+        "propose": propose, "proposals": proposals, "proposal": proposal, "actions": actions, "submit": submit, "approve": approve,
         "reject": reject, "retire": retire}
 
 class _ThreadOut:

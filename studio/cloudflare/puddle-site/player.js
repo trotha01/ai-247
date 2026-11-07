@@ -32,10 +32,14 @@
 
   function teardown() { if (hls) { hls.destroy(); hls = null; } }
 
+  var retryTimer = null;
   function fail(reason) {
     teardown();
+    // report a stall once: until start() runs again the stall check must not fire, and only one retry is pending
+    started = false; lastProgress = Date.now();
     setState(reason === "stalled" ? "stalled" : "offline", OFFLINE_MSG);
-    setTimeout(start, RETRY_MS);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(function () { retryTimer = null; start(); }, RETRY_MS);
   }
 
   function start() {

@@ -28,7 +28,7 @@ cp \$T/box/run_*.sh \$T/box/status.sh \$H/loop/ ; cp \$T/box/bl.sh \$T/box/insta
 chmod -R a+rX \$H/showrunner/agents \$H/engineer; chmod 700 \$H/showrunner/start_showrunner.sh
 rm -rf \$T; echo "copied"
 if [ $RESTART = 1 ]; then
-  pkill -f "channel serve" || true
+  pkill -f '^/hyperai/home/venv/bin/python /hyperai/home/bin/channel serve\$' || true  # the supervisor restarts it
   pkill -f producer_loop.py || true; pkill -f channel_worker.py || true; sleep 2
   \$H/loop/run_producer.sh; \$H/loop/run_worker.sh --block 4 --renders 4
   pkill -f engineer_loop.py || true

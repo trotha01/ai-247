@@ -47,7 +47,8 @@ One-time: copy `.env.box.example` to `.env.box` (git-ignored) and put in how you
 studio/tools/direct.sh "Leave at most one second of silence between lines"   # steer the producer
 studio/tools/direct.sh                                                          # directions, recent scenes, health
 studio/tools/approve.sh                                                         # new-action requests and their status
-studio/tools/approve.sh 20261107-013244-wren_can_spin                           # approve one (look at its preview first)
+studio/tools/approve.sh show 20261107-013244-wren_can_spin                      # its text, notes and code
+studio/tools/approve.sh 20261107-013244-wren_can_spin                           # approve it (look at its preview too)
 studio/tools/deploy.sh --restart                                                # put this checkout's code on the box
 ```
 
@@ -80,6 +81,12 @@ The showrunner page is public behind one password, and the agents can run shell 
   can read. Approving a new action needs root, which in practice means an owner's SSH key (`tools/approve.sh`).
 - Plug-in actions are AI-written code. They are parsed (never imported) by the producer and the service, and only run
   inside Blender as `render`, with a time limit; an error skips that one action, not the scene.
+- Prompt injection: request text reaches the engineer from guests in a public chat (guest → showrunner →
+  `channel propose` → engineer prompt), so a guest can try to steer an agent that runs shell commands as `eng`. The
+  prompt fences the text off as data and the engineer is told to build only animations, but containment does not
+  depend on that: `eng` has no secrets, can only `submit` through the service (files inside its own folder, no links),
+  and nothing it writes runs on air until an owner approves it. Read the code before approving:
+  `tools/approve.sh show ID`. The same holds for the showrunner (`show`), which guests talk to directly.
 - Puddle Park's agents are told to keep it suitable for ages 2-5 whoever asks (`showrunner/agents/AGENTS.md`).
 - Secrets (R2 keys, the showrunner password, tokens) live only on the box and are never committed.
 
