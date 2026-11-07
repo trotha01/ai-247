@@ -49,9 +49,10 @@ R2/Workers within free tier. **~0.3 USD/day.**
 
 Owner: Claude sessions (code), Trevor (review/merge), Mychal (HyperAI install + Blender node).
 
-- [ ] Write `docs/NODE-CONTRACT.md`: a node is a command run in a job folder; reads `node.yaml` (name, inputs, params,
+- [x] Write `docs/NODE-CONTRACT.md`: a node is a command run in a job folder; reads `node.yaml` (name, inputs, params,
       host, timeout, gpu: bool), writes outputs and `result.json` (`status: ok|skip|fail`, outputs, seconds, cost_usd, log).
-- [ ] `pipeline/run.py`: one DBOS runner per host; reads a channel YAML, runs nodes as durable steps, `gpu` queue with
+- [x] Runner (`spine/runner.py`, `python -m spine run`; plain Python loop instead of DBOS for v1, reasons in `docs/NODE-CONTRACT.md`);
+      was: `pipeline/run.py`: one DBOS runner per host; reads a channel YAML, runs nodes as durable steps, `gpu` queue with
       concurrency 1, failure = skip block (same rule as today), publish node always last.
 - [ ] Port AI-247 nodes; run beside the old loop on a test prefix for 24 h; then swap.
 - [ ] Port Lingua; same 24 h shadow then swap.

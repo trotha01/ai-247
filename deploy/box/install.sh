@@ -2,6 +2,8 @@
 # Install (or update) a channel's always-on loops on this machine, all under one folder.
 #
 #   bash deploy/box/install.sh lang [ROOT]        # ROOT defaults to /srv/channels; REF=<branch> to test a branch
+#   SPINE=1 bash deploy/box/install.sh lang       # run the channel as channel@lang (spine runner, channels/lang.yaml)
+#                                                 # instead of deploy/box/lang/*.service (those are left as they are)
 #
 # Runs as the account that will own the services (not root); uses sudo only to create ROOT and turn on lingering.
 # Layout: ROOT/src/ai-247 (code), ROOT/venv, ROOT/voices, ROOT/tools, ROOT/<channel>/{env,r2.env,run/}, ROOT/README.md.
@@ -12,7 +14,7 @@ set -euo pipefail
 CH=${1:?usage: install.sh CHANNEL [ROOT]}
 ROOT=${2:-/srv/channels}
 SRC=$(cd "$(dirname "$0")/../.." && pwd)
-[ -d "$SRC/deploy/box/$CH" ] || { echo "no deploy/box/$CH"; exit 2; }
+[ -d "$SRC/deploy/box/$CH" ] || [ -n "${SPINE:-}" ] || { echo "no deploy/box/$CH"; exit 2; }
 log() { echo "[install $CH] $*"; }
 
 # 1. the folder
@@ -40,7 +42,8 @@ fi
 # 4. python
 [ -x "$ROOT/venv/bin/python" ] || python3 -m venv "$ROOT/venv"
 "$ROOT/venv/bin/pip" install -q --upgrade pip
-"$ROOT/venv/bin/pip" install -q -r "$CODE/$CH/requirements.txt"
+REQ=$CODE/$CH/requirements.txt; [ -f "$REQ" ] || REQ=$CODE/requirements.txt
+"$ROOT/venv/bin/pip" install -q -r "$REQ" pyyaml
 [ -n "$CHROMIUM" ] || "$ROOT/venv/bin/python" -m playwright install chromium
 
 # 5. channel extras + non-secret environment
@@ -64,9 +67,27 @@ fi
 UD=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 mkdir -p "$UD"
 UNITS=()
-for f in "$CODE/deploy/box/$CH"/*.service; do
-  sed "s|@ROOT@|$ROOT|g" "$f" > "$UD/$(basename "$f")"; UNITS+=("$(basename "$f")")
-done
+sed "s|@ROOT@|$ROOT|g" "$CODE/deploy/box/channel@.service" > "$UD/channel@.service"
+if [ -n "${SPINE:-}" ]; then
+  (cd "$CODE" && "$ROOT/venv/bin/python" -m spine check "$CH" > /dev/null)   # fail early on a bad channels/$CH.yaml
+  UNITS+=("channel@$CH.service")
+  # the old per-channel loop must not publish to the same prefix: stop + disable it (unit files are kept for rollback),
+  # and carry the lesson counter over once
+  for f in "$CODE/deploy/box/$CH"/*.service; do
+    [ -e "$f" ] || continue; u=$(basename "$f")
+    if systemctl --user is-enabled -q "$u" 2>/dev/null || systemctl --user is-active -q "$u" 2>/dev/null; then
+      systemctl --user disable --now "$u" && log "stopped + disabled old unit $u (kept; rollback: systemctl --user enable --now $u)"
+    fi
+  done
+  if [ -f "$ROOT/$CH/run/producer/next_n" ] && [ ! -f "$ROOT/$CH/spine/state/pick_lesson/next_n" ]; then
+    mkdir -p "$ROOT/$CH/spine/state/pick_lesson" && cp "$ROOT/$CH/run/producer/next_n" "$ROOT/$CH/spine/state/pick_lesson/next_n"
+    log "lesson counter carried over: $(cat "$ROOT/$CH/spine/state/pick_lesson/next_n")"
+  fi
+else
+  for f in "$CODE/deploy/box/$CH"/*.service; do
+    sed "s|@ROOT@|$ROOT|g" "$f" > "$UD/$(basename "$f")"; UNITS+=("$(basename "$f")")
+  done
+fi
 systemctl --user daemon-reload
 [ "$(loginctl show-user "$(id -un)" -p Linger --value)" = yes ] || sudo loginctl enable-linger "$(id -un)"
 if [ ! -s "$ROOT/$CH/r2.env" ]; then
