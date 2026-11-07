@@ -9,12 +9,9 @@ Reads from the environment (set by .github/workflows/pr-review.yml):
   DIFF_TRUNCATED  "true" when the diff shown to Claude was cut at MAX_DIFF_BYTES
   REVIEW_MODEL    model id, for the footer
 
-Exit status is the check result (EXIT_CODE): 0 = no blocking finding, 1 = blocking finding or a fork PR whose
-author is not allowlisted. A review whose action step FAILED (API outage, credit limit, an action error, the turn
-cap) also exits 0, with a warning annotation and a comment saying that no verdict was reached and a human must
-review: an outage should not block merges, but it must never read as a clean review. A step that SUCCEEDED but
-returned no structured result stays red: that is not an outage, the model may have been steered away from
-answering by the PR's own text, so it is treated as "not reviewed" until a re-run or a human verdict.
+Exit status is the check result (EXIT_CODE): 0 = no blocking finding, 1 = blocking finding, a fork PR whose author
+is not allowlisted, or a review that reached no verdict (the action step failed, or succeeded without a structured
+result). The comment says which of those happened, so a red check is never mistaken for a finding.
 Stdlib only; never prints secrets.
 """
 from __future__ import annotations
@@ -27,8 +24,8 @@ import urllib.request
 
 MARKER = "<!-- claude-pr-review -->"
 API = "https://api.github.com"
-# build() status -> job exit code. "incomplete" (the review did not run to a verdict) is deliberately 0: see the docstring.
-EXIT_CODE = {"ok": 0, "incomplete": 0, "blocking": 1, "skipped": 1, "noresult": 1}
+# build() status -> job exit code.
+EXIT_CODE = {"ok": 0, "incomplete": 1, "blocking": 1, "skipped": 1, "noresult": 1}
 
 
 def gh(method: str, path: str, body: dict | None = None):
@@ -89,9 +86,8 @@ def build(repo: str, pr: str) -> tuple[str, str]:
             f"{MARKER}\n## Claude review: did not complete (no verdict)\n\n"
             f"The review step ended with outcome `{outcome or 'unknown'}` and returned no structured result: an API "
             f"error, the credit limit, the action's turn cap, or a transient failure (see the [workflow run]({run_url})). "
-            "**No finding was recorded and nothing in this PR has been reviewed by Claude.** The check is reported as "
-            "passed with a warning so that an outage does not block merges; a human must review this PR, or re-run the "
-            "job from the workflow run to get a verdict.\n"
+            "**No finding was recorded and nothing in this PR has been reviewed by Claude.** This check stays red until "
+            "a re-run of the job completes or a maintainer reviews the PR by hand.\n"
         )
         return md, "incomplete"
     if not isinstance(data, dict):
@@ -149,7 +145,7 @@ def main() -> int:
 
     print(md)
     if status == "incomplete":
-        print("::warning::Claude review did not complete: no verdict, a human must review this PR (re-run the job for a verdict)")
+        print("::error::Claude review did not complete: no verdict (re-run the job after the outage, or review by hand)")
     elif status == "skipped":
         print("::error::Claude review not run: fork author is not on FORK_REVIEW_AUTHORS")
     elif status == "noresult":

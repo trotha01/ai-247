@@ -1,9 +1,8 @@
 """The comment and check result of .github/scripts/pr_review_comment.py for each outcome of the review step.
 
 The script is what turns claude-code-action's result into the `claude-review` status check (docs/CONTRIBUTING.md):
-a blocking finding, a non-allowlisted fork author, or a step that succeeded without a structured verdict is red; a
-clean review is green; a step that failed (outage, cap) is green with a warning and a comment that says no verdict
-was reached, never a silent pass.
+a blocking finding, a non-allowlisted fork author, a failed step (outage, cap) and a step that succeeded without a
+structured verdict are all red, each with a comment that says which; a clean review is green.
 """
 from __future__ import annotations
 
@@ -51,11 +50,11 @@ def test_blocking_finding_is_red(monkeypatch):
 
 
 @pytest.mark.parametrize("outcome", ["failure", "cancelled", "skipped", ""])
-def test_failed_step_is_a_warning_not_a_failure(monkeypatch, outcome):
+def test_failed_step_is_red_and_says_so(monkeypatch, outcome):
     md, status = build(monkeypatch, REVIEW_OUTCOME=outcome, REVIEW_JSON="")
-    assert status == "incomplete" and prc.EXIT_CODE[status] == 0
+    assert status == "incomplete" and prc.EXIT_CODE[status] == 1
     assert "did not complete (no verdict)" in md
-    assert "human must review" in md and "actions/runs/123" in md
+    assert "stays red" in md and "actions/runs/123" in md
     assert "no blocking findings" not in md  # never reads as a clean review
 
 
@@ -94,7 +93,7 @@ class FakeGitHub:
 @pytest.mark.parametrize("env, status, code, annotation", [
     ({"REVIEW_OUTCOME": "success", "REVIEW_JSON": CLEAN}, "ok", 0, None),
     ({"REVIEW_OUTCOME": "success", "REVIEW_JSON": BLOCKING}, "blocking", 1, "::error::Claude review: blocking finding"),
-    ({"REVIEW_OUTCOME": "failure", "REVIEW_JSON": ""}, "incomplete", 0, "::warning::Claude review did not complete"),
+    ({"REVIEW_OUTCOME": "failure", "REVIEW_JSON": ""}, "incomplete", 1, "::error::Claude review did not complete"),
     ({"REVIEW_OUTCOME": "success", "REVIEW_JSON": "nope"}, "noresult", 1, "::error::Claude review: the step succeeded"),
     ({"REVIEW_SKIPPED": "true", "REVIEW_OUTCOME": "skipped"}, "skipped", 1, "::error::Claude review not run"),
 ])
