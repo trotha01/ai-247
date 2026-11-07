@@ -78,6 +78,44 @@ def build_pool_manifest(blocks: list[dict], epoch: int | None, built_from: dict,
 
 
 # ---------------------------------------------------------------- R2 side -------------------------------------
+class PrefixedS3:
+    """A boto3 S3 client seen through a channel prefix (e.g. Puddle Park's `puddle/` in the shared bucket): every Key
+    and list Prefix gets the prefix, listed keys come back without it. So pool keys and segment uris stay relative to
+    the Worker PREFIX, exactly as for ai-247 at the root, and nothing outside the prefix is read or written."""
+
+    def __init__(self, s3, prefix: str):
+        self.s3, self.p = s3, prefix
+
+    def list_objects_v2(self, Bucket, Prefix, **kw):
+        r = dict(self.s3.list_objects_v2(Bucket=Bucket, Prefix=self.p + Prefix, **kw))
+        r["Contents"] = [{**o, "Key": o["Key"][len(self.p):]} for o in r.get("Contents", []) if o["Key"].startswith(self.p)]
+        return r
+
+    def get_object(self, Bucket, Key, **kw):
+        return self.s3.get_object(Bucket=Bucket, Key=self.p + Key, **kw)
+
+    def head_object(self, Bucket, Key, **kw):
+        return self.s3.head_object(Bucket=Bucket, Key=self.p + Key, **kw)
+
+    def put_object(self, Bucket, Key, **kw):
+        return self.s3.put_object(Bucket=Bucket, Key=self.p + Key, **kw)
+
+    def upload_file(self, filename, bucket, key, ExtraArgs=None):
+        return self.s3.upload_file(filename, bucket, self.p + key, ExtraArgs=ExtraArgs)
+
+
+def check_key_prefix(prefix: str) -> str:
+    """'' (ai-247 at the bucket root) or a channel folder like `puddle/`; anything else is refused."""
+    if prefix and (not prefix.endswith("/") or prefix.startswith("/") or ".." in prefix):
+        raise SystemExit(f"--key-prefix must be empty or a folder like puddle/, not {prefix!r}")
+    return prefix
+
+
+def channel_client(prefix: str = ""):
+    s3 = r2.client()
+    return PrefixedS3(s3, prefix) if prefix else s3
+
+
 def _list_keys(s3, bucket: str, prefix: str) -> list[str]:
     keys, token = [], None
     while True:
@@ -247,6 +285,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-blocks", type=int, default=1, help="--from-r2: how many newest complete episodes to loop")
     ap.add_argument("--epoch", type=int, default=None, help="channel epoch (unix s); default: the live manifest's, if it has one")
     ap.add_argument("--pool-key", default=POOL_KEY)
+    ap.add_argument("--key-prefix", default="", help="channel folder in the bucket, e.g. puddle/ (the Worker PREFIX); every key is under it")
     ap.add_argument("--write", default="pool-manifest.json", help="also write the pool manifest to this local path")
     ap.add_argument("--upload", action="store_true", help="publish to R2 (needs R2_* env; otherwise only --write happens)")
     ap.add_argument("--force", action="store_true", help="--upload: rewrite the pool manifest even when it would list the same segments or an older episode")
@@ -263,7 +302,7 @@ def main(argv=None) -> int:
                 return 2
             print("R2 secrets not set: skipping upload, writing the pool manifest locally only")
         else:
-            s3, bucket = r2.client(), r2.bucket()
+            s3, bucket = channel_client(check_key_prefix(a.key_prefix)), r2.bucket()
 
     blocks, local_blocks, report, epoch, seg_s = [], [], {}, a.epoch, 6
     if a.from_r2 and s3:

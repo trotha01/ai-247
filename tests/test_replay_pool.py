@@ -328,3 +328,34 @@ def test_worker_fixture_matches_the_bootstrap_shape():
     fx = json.loads(Path("worker/test/fixtures/replay-pool.json").read_text())
     worker_shape_ok(fx)
     assert set(fx) >= {"kind", "built_at", "built_from", "blocks", "segment_seconds"}
+
+
+def test_key_prefix_keeps_a_channel_inside_its_folder(tmp_path, monkeypatch):
+    """--key-prefix puddle/: reads puddle/bulletins/, writes puddle/pool/manifest.json with uris relative to the
+    Worker PREFIX, and never touches ai-247's root bulletins/ or pool/."""
+    s3 = FakeS3()
+    r2_bulletin(s3, "20261106T120000Z")  # ai-247 at the root: must be ignored
+    inner = FakeS3()
+    r2_bulletin(inner, "20261107T090000Z", n=12)
+    for k, v in inner.objects.items():
+        s3.objects["puddle/" + k] = v
+    s3.objects["pool/manifest.json"] = b'{"untouched": true}'
+    for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(k, "fake")
+    monkeypatch.setenv("R2_BUCKET", "b")
+    monkeypatch.setattr(r2, "client", lambda: s3)
+    out = tmp_path / "pool.json"
+    assert replay_pool.main(["--from-r2", "--key-prefix", "puddle/", "--min-segments", "10", "--write", str(out), "--upload"]) == 0
+    m = json.loads(s3.objects["puddle/pool/manifest.json"])
+    worker_shape_ok(m)
+    assert [b["id"] for b in m["blocks"]] == ["pool-20261107T090000Z"]
+    assert all(s["uri"].startswith("bulletins/20261107T090000Z/") for s in m["blocks"][0]["segments"])
+    assert s3.objects["pool/manifest.json"] == b'{"untouched": true}'
+    assert [k for k, _ in s3.puts] == ["puddle/pool/manifest.json"]
+
+
+def test_key_prefix_is_validated():
+    for bad in ("puddle", "/puddle/", "../x/"):
+        with pytest.raises(SystemExit):
+            replay_pool.check_key_prefix(bad)
+    assert replay_pool.check_key_prefix("") == "" and replay_pool.check_key_prefix("puddle/") == "puddle/"
