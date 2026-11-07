@@ -17,9 +17,13 @@ Short version: branch, open a pull request, make the checks green, merge. Nothin
 1. `ci` (`tests`, `worker-site-e2e`): the unit, seam, Worker and site e2e tests. Runs on the plain
    `pull_request` event, so it has no secrets and runs for forks as well.
 2. `pr-review` (`claude-review`): Claude reads the PR diff and posts one comment with **blocking** and
-   **non-blocking** findings; the check is red when there is a blocking finding or the review could not run.
+   **non-blocking** findings; the check is red when there is a blocking finding.
    It uses `claude-haiku-5-5`, read-only tools, a turn cap and a diff cap, so a run costs cents. Draft PRs are
    skipped; mark the PR ready for review to trigger it.
+
+   If the review itself could not complete (API outage, credit limit, the action's turn cap on a very large diff),
+   the comment says "did not complete (no verdict)" and the check passes with a warning instead of blocking the
+   merge. That is not a clean review: a maintainer reads the PR by hand, or re-runs the job for a verdict.
 
    Safety: the job runs on `pull_request_target`, so it holds the repository's `ANTHROPIC_API_KEY`. It
    therefore never checks out or executes PR code. It checks out the base branch and fetches the PR as a diff
@@ -31,7 +35,7 @@ Short version: branch, open a pull request, make the checks green, merge. Nothin
    and re-runs the job, or pushes the branch into this repository and opens the PR from there.
 
 A blocking finding you believe is wrong: reply on the PR, fix or explain, and ask a maintainer. Re-run the
-`pr-review` job from the Actions tab after an API outage.
+`pr-review` job from the Actions tab after an API outage to get a verdict.
 
 ## Secrets
 

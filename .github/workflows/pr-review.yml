@@ -1,7 +1,9 @@
 name: pr-review
 
 # Claude review of every non-draft pull request, posted as one sticky comment and reported as the
-# status check `claude-review` (red when there is a blocking finding). See docs/CONTRIBUTING.md.
+# status check `claude-review`: red when there is a blocking finding (or a fork author is not allowlisted);
+# a run that could not complete (API outage, credit limit, the action's turn cap) passes with a warning
+# and a comment that says no verdict was reached, so a human reviews instead. See docs/CONTRIBUTING.md.
 #
 # Safety model. This runs on `pull_request_target`, so it has the repository secrets and the
 # base branch's copy of this file, for PRs from forks too. Because of that it NEVER checks out or
@@ -27,8 +29,11 @@ env:
   # fork PR gets the tests from ci.yml and a note here; a maintainer reviews it by hand.
   FORK_REVIEW_AUTHORS: "EliasTheApe"
   # Cost caps: cheapest current model, a turn limit, a dollar limit per run, and a cap on the diff Claude is shown.
+  # MAX_TURNS needs headroom: claude-code-action fails the step when Claude's own turn count exceeds it, even on a
+  # successful result (PR #39, a 150 KB diff: "successful result after 14 turns, exceeding the configured maximum
+  # of 12", structured output lost, check red). The dollar cap is the real cost limit (that run cost 0.01 USD).
   REVIEW_MODEL: claude-haiku-5-5
-  MAX_TURNS: "12"
+  MAX_TURNS: "30"
   MAX_BUDGET_USD: "0.50"
   MAX_DIFF_BYTES: "150000"
 
