@@ -46,8 +46,8 @@ def worker_url_from_site() -> str:
     return u.rsplit("/", 1)[0] if "/" in u else ""
 
 
-def check_r2(local: dict, pool_key: str) -> bool:
-    s3, b = r2.client(), r2.bucket()
+def check_r2(local: dict, pool_key: str, key_prefix: str = "") -> bool:
+    s3, b = replay_pool.channel_client(replay_pool.check_key_prefix(key_prefix)), r2.bucket()
     h = s3.head_object(Bucket=b, Key=pool_key)
     print(f"R2 {pool_key}: {h['ContentLength']} bytes, last modified {h['LastModified']:%Y-%m-%dT%H:%M:%SZ}")
     m = replay_pool.existing_pool(s3, b, pool_key) or {}
@@ -98,6 +98,7 @@ def main(argv=None) -> int:
     ap.add_argument("--manifest", default="pool-manifest.json", help="the pool manifest the refresh wrote/kept")
     ap.add_argument("--url", default=os.environ.get("WORKER_URL") or "", help="Worker base URL (default: $WORKER_URL, else site/config.json)")
     ap.add_argument("--pool-key", default=replay_pool.POOL_KEY)
+    ap.add_argument("--key-prefix", default="", help="channel folder in the bucket, e.g. puddle/ (keys are under it)")
     ap.add_argument("--wait", type=int, default=120, help="seconds to poll /healthz")
     ap.add_argument("--healthz-out", default="healthz.json", help="write the last /healthz body here ('' = no)")
     ap.add_argument("--no-r2", action="store_true", help="skip the R2 check even if secrets are set")
@@ -107,7 +108,7 @@ def main(argv=None) -> int:
     if a.no_r2:
         print("R2 check skipped (--no-r2)")
     elif r2.r2_configured():
-        ok = check_r2(local, a.pool_key) and ok
+        ok = check_r2(local, a.pool_key, a.key_prefix) and ok
     else:
         print("R2 secrets not set: R2 check skipped")
     url = a.url or worker_url_from_site()

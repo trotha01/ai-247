@@ -10,9 +10,19 @@ name: replay-pool
 # are the ones the pool already lists, nothing is rewritten. A good pool/manifest.json is never replaced by an
 # empty one. To stop the cron without a commit: set the repo variable REPLAY_POOL_CRON_ENABLED to "false" or run
 # gh workflow disable replay-pool -R trotha01/ai-247
+#
+# Channels (matrix): ai-247 at the bucket root (pool/manifest.json, daily at 04:41) and Puddle Park under puddle/
+# (puddle/pool/manifest.json from puddle/bulletins/<ts>/, every 6 h; --key-prefix keeps it inside puddle/). Until the
+# Puddle Park box has uploaded a complete episode the puddle leg finds nothing and writes nothing (exit 3, red).
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: "which channel's pool to refresh"
+        required: true
+        default: "all"
+        type: choice
+        options: ["all", "ai-247", "puddle"]
       source:
         description: "r2 = newest complete episodes already in R2 (bulletins/<ts>/); artifact = a workflow artifact (Day 0 bulletin or Day 1 episode) uploaded under pool/<id>/"
         required: true
@@ -35,6 +45,8 @@ on:
   schedule:
     # Daily, after the 03:23 UTC day1-episode cron run (23 */3, up to 35 min) has published; off the top of the hour.
     - cron: "41 4 * * *"
+    # Puddle Park only (its episodes arrive every few minutes; the pool should not lag a day behind).
+    - cron: "11 */6 * * *"
 
 permissions:
   contents: read
@@ -56,18 +68,44 @@ jobs:
     if: github.repository == 'trotha01/ai-247' && (github.event_name != 'schedule' || vars.REPLAY_POOL_CRON_ENABLED != 'false')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: ai-247
+            key_prefix: ""
+            cron: "41 4 * * *"
+          - channel: puddle
+            key_prefix: "puddle/"
+            cron: "11 */6 * * *"
+            worker_url: "https://puddle-live.trotha01.workers.dev"
+    env:
+      KEY_PREFIX: ${{ matrix.key_prefix }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check R2 secrets
+      - name: Check R2 secrets (and that this channel is selected)
         id: gate
         env:
           A: ${{ secrets.R2_ACCOUNT_ID }}
           K: ${{ secrets.R2_ACCESS_KEY_ID }}
           S: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           B: ${{ secrets.R2_BUCKET }}
+          WANT: ${{ inputs.channel || 'all' }}
+          CHANNEL: ${{ matrix.channel }}
+          EVENT_CRON: ${{ github.event.schedule }}
+          MY_CRON: ${{ matrix.cron }}
         run: |
-          if [ -z "$A" ] || [ -z "$K" ] || [ -z "$S" ] || [ -z "$B" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$EVENT_CRON" != "$MY_CRON" ]; then
+            echo "$CHANNEL: not this channel's schedule; skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ "$WANT" != "all" ] && [ "$WANT" != "$CHANNEL" ]; then
+            echo "$CHANNEL: not selected ($WANT); skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ "$CHANNEL" != "ai-247" ] && [ "$SOURCE" = "artifact" ]; then
+            echo "$CHANNEL: source=artifact loops ai-247 renders only; skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$A" ] || [ -z "$K" ] || [ -z "$S" ] || [ -z "$B" ]; then
             echo "::warning::R2_* secrets are not set: nothing to do (no-op). Add the repo secrets and re-run this workflow."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
@@ -114,9 +152,9 @@ jobs:
           set -o pipefail
           echo "event: $GITHUB_EVENT_NAME, source: $SOURCE, max_blocks: $MAX_BLOCKS${FORCE:+, $FORCE}"
           if [ "$SOURCE" = "r2" ]; then
-            python -m newsbot.replay_pool --from-r2 --max-blocks "$MAX_BLOCKS" --min-segments "$MIN_SEGMENTS" --write pool-manifest.json --upload $FORCE | tee publish.log
+            python -m newsbot.replay_pool --from-r2 --max-blocks "$MAX_BLOCKS" --min-segments "$MIN_SEGMENTS" --key-prefix "$KEY_PREFIX" --write pool-manifest.json --upload $FORCE | tee publish.log
           else
-            python -m newsbot.replay_pool --from-dir "$POOL_DIR" --id "$POOL_ID" --min-segments "$MIN_SEGMENTS" --write pool-manifest.json --upload $FORCE | tee publish.log
+            python -m newsbot.replay_pool --from-dir "$POOL_DIR" --id "$POOL_ID" --min-segments "$MIN_SEGMENTS" --key-prefix "$KEY_PREFIX" --write pool-manifest.json --upload $FORCE | tee publish.log
           fi
 
       - name: Verify pool/manifest.json in R2 and the Worker's /healthz
@@ -127,16 +165,16 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           # The live Worker: repo variable WORKER_URL, else the host of streamUrl in site/config.json.
-          WORKER_URL: ${{ vars.WORKER_URL }}
+          WORKER_URL: ${{ matrix.worker_url || vars.WORKER_URL }}
         # Reads pool/manifest.json back from R2 (must verify complete and list the same segments as
         # pool-manifest.json), then polls /healthz until pool.ok with this run's built_at (the Worker's pool cache
         # is 60 s). Writes healthz.json for the summary and the artifact.
-        run: python scripts/pool_check.py --manifest pool-manifest.json --wait 150
+        run: python scripts/pool_check.py --manifest pool-manifest.json --key-prefix "$KEY_PREFIX" --wait 150
 
       - name: Job summary
         if: always()
         run: |
-          { echo '## Replay pool'; echo
+          { echo "## Replay pool: ${{ matrix.channel }}"; echo
             [ -f publish.log ] && { echo '```'; cat publish.log; echo '```'; echo; }
             [ -f healthz.json ] && { echo '### /healthz'; echo '```json'; head -c 3000 healthz.json; echo; echo '```'; echo; }
             echo '### pool manifest'; echo '```json'; head -c 4000 pool-manifest.json 2>/dev/null || echo '(no pool manifest written)'; echo; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
@@ -144,7 +182,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: replay-pool-manifest
+          name: replay-pool-manifest-${{ matrix.channel }}
           path: |
             pool-manifest.json
             healthz.json
