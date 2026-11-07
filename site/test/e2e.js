@@ -33,7 +33,10 @@ const check = (name, ok, extra = "") => { console.log(`${ok ? "PASS" : "FAIL"} $
     check("source list has 8 links", (await p.locator("#sources li a").count()) === 8);
     check("hls.js loaded (SRI ok)", await p.evaluate(() => typeof window.Hls === "function"));
     check("no page errors", p.errors.length === 0, p.errors.join(";"));
-    check("empty config => offline message", (await waitState(p, "offline", 3000)) && await p.locator("#status").isVisible());
+    // Only meaningful while site/config.json has no streamUrl (before go-live); with a streamUrl the page connects.
+    const cfg = JSON.parse(require("fs").readFileSync(path.join(__dirname, "..", "config.json"), "utf8"));
+    if (cfg.streamUrl) console.log(`SKIP empty config => offline message (config.json has streamUrl ${cfg.streamUrl})`);
+    else check("empty config => offline message", (await waitState(p, "offline", 3000)) && await p.locator("#status").isVisible());
 
     // 2. play Day 0-style segments
     const codecOk = await p.evaluate(() => MediaSource.isTypeSupported('video/mp4; codecs="avc1.4d401f,mp4a.40.2"'));
@@ -60,12 +63,22 @@ const check = (name, ok, extra = "") => { console.log(`${ok ? "PASS" : "FAIL"} $
     await fetch(BASE + "/__mode/ok");
     if (codecOk) check("recovers after playlist returns", await waitState(p, "live", 20000));
 
-    // 4. stalled: segments hang
+    // 4. stalled: segments hang in the middle of playback (the stall must follow real playback: the retry pile-up
+    //    only happened once `started` was true, so a page that never played would not show it)
     if (codecOk) {
-      await fetch(BASE + "/__mode/freeze");
       p = await newPage();
       await p.goto(`${BASE}/?src=${BASE}/stream/index.m3u8&stall=4000&retry=2000`);
-      check("hanging segments => stalled/offline fallback", (await waitState(p, "stalled", 40000)) || (await waitState(p, "offline", 20000)));
+      check("plays before the stall", await waitState(p, "live", 20000));
+      await fetch(BASE + "/__mode/freeze");
+      // hls.js has buffered up to 30 s ahead, so the stall shows once that drains
+      check("hanging segments => stalled/offline fallback", (await waitState(p, "stalled", 60000)) || (await waitState(p, "offline", 20000)));
+      // One retry per stall: with stall=4000 and retry=2000, exactly one start() may follow in the 3.5 s after the
+      // stall (the retry at +2 s; the next stall check cannot fire before +6 s). The old player re-queued a retry on
+      // every 1 s tick after the stall, so starts piled up (2 or more in this window).
+      const before = +(await p.evaluate(() => document.body.dataset.starts));
+      await sleep(3500);
+      const after = +(await p.evaluate(() => document.body.dataset.starts));
+      check("a stall queues a single retry", after - before <= 1, `starts ${before} -> ${after}`);
       await fetch(BASE + "/__mode/ok");
     }
   } finally {
