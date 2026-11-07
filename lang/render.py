@@ -129,7 +129,7 @@ def render_cards(sc: dict, work: Path) -> list[Path]:
     out = []
     with sync_playwright() as p:
         exe = os.environ.get("LANG_CHROMIUM") or None  # a system Chromium (e.g. from nix) instead of Playwright's download
-        b = p.chromium.launch(executable_path=exe, args=["--allow-file-access-from-files"])
+        b = p.chromium.launch(executable_path=exe, args=["--allow-file-access-from-files", "--disable-gpu"])
         page = b.new_page(viewport={"width": 1280, "height": 720})
         cache = {}
         for i, st in enumerate(sc["steps"]):
