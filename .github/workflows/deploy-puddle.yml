@@ -3,6 +3,8 @@ name: deploy-puddle
 # Puddle Park's Cloudflare Workers, on this repository's Cloudflare account (the existing CLOUDFLARE_API_TOKEN):
 #   studio/cloudflare/puddle-live/       -> Worker `puddle-live` (this repo's worker/src, PREFIX=puddle/, bucket ai247-media)
 #   studio/cloudflare/showrunner-link/   -> Worker `puddle-showrunner` (fixed link to the showrunner tunnel)
+#   studio/cloudflare/puddle-site/       -> Pages project `puddle-park-tv` (the player; streamUrl = puddle-live). The old
+#                                           puddle-park.pages.dev is on Mychal's account and still plays aitv-live.
 # This is the ONLY way those Workers are deployed: the Puddle Park box holds an R2 key and no Workers/Pages rights.
 #
 # Off by default. A run deploys only when ALL hold: the repository variable PUDDLE_DEPLOY_ENABLED is `true` (unset or
@@ -72,3 +74,16 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: studio/cloudflare/showrunner-link
           command: deploy
+      - name: Deploy the player page (Pages project puddle-park-tv)
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: puddle-park-tv
+        run: |
+          set -eu
+          grep -q '"streamUrl": "https://puddle-live\.' studio/cloudflare/puddle-site/config.json
+          npx --yes wrangler@4 pages project list | grep -qw "$PAGES_PROJECT" \
+            || npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch=main
+          npx --yes wrangler@4 pages deploy studio/cloudflare/puddle-site --project-name="$PAGES_PROJECT" --branch=main --commit-dirty=true
+          curl -fsS --retry 5 --retry-delay 5 "https://$PAGES_PROJECT.pages.dev/config.json" | grep -q puddle-live
