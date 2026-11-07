@@ -11,13 +11,14 @@ Loop:
      earlier blocks kept as replays,
   5. keep the prefix under CAP_GB (delete the oldest blocks the live manifest no longer references).
 
-    python -m lang.channel_worker --root $CHANNELS_ROOT/lang/run --prefix lang/
+    python -m lang.channel_worker --root /srv/channels/lang/run --prefix lang/     # ROOT/lang/run of install.sh
     python -m lang.channel_worker --root /tmp/lang --max-blocks 25        # bounded test run, then exit
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -49,6 +50,18 @@ class PrefixS3:
 
     def get_object(self, Bucket, Key, **kw):
         return self.s3.get_object(Bucket=Bucket, Key=self.p + Key, **kw)
+
+
+def normalize_r2_secret(env=os.environ) -> bool:
+    """R2 secret access keys are 64 hex characters. A key pasted with dashes in it (seen on a box 2026-11-07:
+    66 characters, two '-') signs requests wrongly (SignatureDoesNotMatch / 403). Drop the dashes only when what
+    remains is exactly 64 hex characters; returns True if the value was changed. The value is never printed."""
+    v = env.get("R2_SECRET_ACCESS_KEY", "")
+    fixed = v.strip().replace("-", "")
+    if fixed != v and len(fixed) == 64 and all(c in "0123456789abcdefABCDEF" for c in fixed):
+        env["R2_SECRET_ACCESS_KEY"] = fixed
+        return True
+    return False
 
 
 def check_prefix(prefix: str) -> str:
@@ -182,6 +195,8 @@ def main(argv=None):
     from newsbot import publish, r2
     s3_raw = bucket = s3 = None
     if not a.dry_run:
+        if normalize_r2_secret():
+            log("R2_SECRET_ACCESS_KEY had dashes in it: using it without them (64 hex characters)")
         if not r2.r2_configured():
             raise SystemExit("R2_* environment not set (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET)")
         s3_raw, bucket = r2.client(), r2.bucket()
