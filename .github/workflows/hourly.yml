@@ -136,17 +136,25 @@ jobs:
         # The ffmpeg install (about 100 MB of packages) hit the 120 s cap on all three attempts of slice 5 in the
         # scheduled run 42298386727 (attempt 3: the small packages were done after 23 s, then ffmpeg timed out), so
         # the apt installs now get 180 s and 240 s, the stage that failed is named, and a killed apt is repaired with
-        # `dpkg --configure -a` before the next attempt. Worst case per attempt: 120 + 180 + 240 + 200 s = 12.3 min,
+        # `dpkg --configure -a` before the next attempt. Worst case per attempt: 120 + 180 + 240 + 180 + 200 s = 15.3 min,
         # so 20 minutes always allows a normal second attempt (installs take 35-75 s when the mirror is healthy).
         timeout-minutes: 20
         run: |
           start=$SECONDS
+          static_ffmpeg() {
+            # fallback when the apt mirror stalls on the ~100 MB ffmpeg install (slices 5 of runs 42298386727 and 42321630781,
+            # 120 s x 3): a static build from GitHub releases, which runners fetch in seconds; the render tests still gate the output
+            echo "apt ffmpeg failed; fetching the static build (BtbN/FFmpeg-Builds n8.1 gpl)"
+            timeout 180 curl -sSL --retry 2 -o "$RUNNER_TEMP/ff.tar.xz" https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz \
+              && mkdir -p "$RUNNER_TEMP/ff" && tar -xJf "$RUNNER_TEMP/ff.tar.xz" -C "$RUNNER_TEMP/ff" --strip-components=1 \
+              && sudo install -m 755 "$RUNNER_TEMP/ff/bin/ffmpeg" "$RUNNER_TEMP/ff/bin/ffprobe" /usr/local/bin/ && ffmpeg -version | head -1
+          }
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
             t0=$SECONDS; stage=apt-update
             if timeout 120 $APT update -qq \
                && { stage=apt-install; timeout 180 $APT install -y -qq $INSTALL_PKGS; } \
-               && { stage=apt-ffmpeg; command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg; } \
+               && { stage=apt-ffmpeg; command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg || static_ffmpeg; } \
                && { echo "apt: $((SECONDS-t0)) s"; stage=pip; t1=$SECONDS; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt && echo "pip: $((SECONDS-t1)) s"; }; then
               echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
             fi
