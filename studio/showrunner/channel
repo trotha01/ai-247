@@ -56,6 +56,7 @@ ALLOWED = {
     "eng": READ | {"submit"},
     "gate": {"notes", "recent", "proposals"},
 }
+sys.dont_write_bytecode = True  # the root service never writes __pycache__ into folders it imports from
 sys.path.insert(0, "/hyperai/home/kids-test/blender")
 
 
@@ -425,7 +426,10 @@ def approve(args):
     if d["status"] != "ready":
         sys.exit(f"{d['id']} is {d['status']}, not ready")
     ACTIONS_LIVE.mkdir(parents=True, exist_ok=True)
-    shutil.copy(PROPOSALS / d["id"] / "action.py", ACTIONS_LIVE / f"{d['action']}.py")
+    live = ACTIONS_LIVE / f"{d['action']}.py"
+    if live.exists() and "--replace" not in args[1:]:
+        sys.exit(f"{d['action']} is already live; to replace it with this version run: channel approve {d['id']} --replace")
+    shutil.copy(PROPOSALS / d["id"] / "action.py", live)
     d["status"] = "live"
     _save(d, "approved by owner")
     print(f"{d['action']} is live: the producer can use it from its next scene")
@@ -496,12 +500,21 @@ def handle(conn):
                 if not chunk:
                     return
                 data += chunk
+                if len(data) > MAX_REQUEST:  # one connection must not make the root service hold unbounded memory
+                    return
             argv = json.loads(data)["argv"]
             uid = struct.unpack("3i", conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))[1]
             try:
                 who = pwd.getpwuid(uid).pw_name
             except KeyError:
                 who = str(uid)
+            try:
+                check_imports()
+            except SystemExit as e:
+                print(time.strftime("%H:%M:%S"), str(e)[:300], flush=True)
+                conn.sendall(json.dumps({"code": 1, "out": "the channel service is paused: its code failed a "
+                                                              "safety check (see channel_service.log)\n"}).encode())
+                return
             if not argv or argv[0] not in CMDS or argv[0] == "serve" or not all(isinstance(a, str) for a in argv):
                 code, out = 1, __doc__
             elif argv[0] not in ALLOWED.get(who, set()):
@@ -515,20 +528,23 @@ def handle(conn):
             print(time.strftime("%H:%M:%S"), "request dropped:", repr(e)[:200], flush=True)
 
 
+MAX_REQUEST = 64 * 1024
 IMPORT_DIRS = ["/hyperai/home/kids-test/blender", "/hyperai/home/ai-247", "/hyperai/home/ai-247/newsbot"]
 
 
 def check_imports():
-    """The service runs as root and imports code from these folders: refuse to serve if any of them, or any .py
-    file in them, is not root-owned or is writable by group or others."""
+    """The service runs as root and imports code from these folders: refuse to act if anything in them, at any
+    depth (subpackages and __pycache__ included), is not root-owned, is writable by group or others, or is a link.
+    Checked when the service starts and again before every request."""
     bad = []
-    for d in IMPORT_DIRS:
-        for f in [Path(d)] + sorted(Path(d).glob("*.py")):
-            st = f.lstat()
-            if st.st_uid != 0 or st.st_mode & 0o022 or stat.S_ISLNK(st.st_mode):
-                bad.append(str(f))
+    for top in IMPORT_DIRS:
+        for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+            for f in [dirpath] + [os.path.join(dirpath, n) for n in dirnames + filenames]:
+                st = os.lstat(f)
+                if st.st_uid != 0 or st.st_mode & 0o022 or stat.S_ISLNK(st.st_mode):
+                    bad.append(f)
     if bad:
-        sys.exit("refusing to serve: code the root service imports is not root-only: " + ", ".join(bad[:5]))
+        sys.exit("refusing: code the root service imports is not root-only: " + ", ".join(bad[:5]))
 
 
 def serve(_):
