@@ -49,10 +49,12 @@ AI-247: make the GitHub Actions episode cron fire unattended and prove it (a sch
 - PR #37 (`cloud/ai247-hourlyfix`, another session's follow-up: source-interleaved rundown, apt bounds 180/240 s + dpkg repair, render `continue-on-error`, stitch verdict = published): on the supervisor's request I fixed its two blocking review findings by dropping the unverified static-ffmpeg fallback (rolling BtbN `latest`, `sudo install`, no checksum, on `pull_request`) from ci.yml and hourly.yml (github.com is 403 from this session, so no pinned release + SHA-256 could be verified; the comment says how to bring it back), guarded the stitch slice loop, corrected its status message; review re-ran green; squash-merged to main as 2e7c883 at 01:26Z.
 - 01:23Z slot: no `schedule` event by 01:26Z (poller continues to ~03:05Z). The 01:00Z protective dispatch 42321630781 (other session) published `20261107T010056Z`, red only on slice 5's install stall.
 
+- **Cron proven green (02:16Z):** `hourly-bulletins` run 42327176145, `event=schedule`, created 02:02:23Z for the 01:23Z slot on 2e7c883, `success` in 13.5 min, all 6 slices rendered, 613 objects / 191 MB published, root manifest last; `/healthz` manifest.uploaded 02:15:40Z (1205 segments / 13 blocks); `live.m3u8` serving `20261107T020233Z-00`; pages.dev plays it (headless, no errors). Recorded in docs/PLAN.md "Schedule trigger: proven".
+
 ## Pending
-- PR #36 (source floor + PLAN.md proof) merged to main as 42bd765 at 01:07Z (all three checks green). Nothing uncommitted or unmerged.
-- Next scheduled run green end to end: the source-floor fix needs one scheduled run to confirm; the stitch publishes regardless.
-- **needs_you (Trevor)**: GitHub honoured 1 of 9 slots today. Decide on the Cloudflare Cron Trigger fallback (a Worker scheduled handler calling the `workflow_dispatch` API with a fine-grained PAT, Actions: read and write, this repo only) or a GitHub Support ticket; nothing in the repo is left to change for the trigger.
+- Nothing for this item once the final PR (PLAN.md proof + this handoff) is merged.
+- Trevor (optional, not blocking): GitHub honoured 2 of 11 slots today, both late (15 and 39 min). If hourly reliability matters, the Cloudflare Cron Trigger fallback (Worker scheduled handler calling the `workflow_dispatch` API with a fine-grained PAT, Actions: read and write, this repo only) or a Support ticket. The stale-manifest failover (4 h) and replay loop cover missed hours meanwhile.
+- Todo ids (jmacs unavailable here): apply the triage verdicts in the table above; this item (cron) is done.
 
 ## Next step
-Merge the PR, then watch `actions/runs?event=schedule`: the next scheduled run should be green with the source floor at 3 (slices) and publish; if GitHub keeps dropping slots, Trevor's call on the Cloudflare dispatcher.
+None. Merge the final PR; then the schedule runs on its own (Trigger step prints `event=schedule`).
