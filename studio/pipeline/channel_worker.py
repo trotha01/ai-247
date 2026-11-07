@@ -212,7 +212,7 @@ def main():
     ap.add_argument("--image-every", type=int, default=600, help="seconds between MOSS image windows (0 = never)")
     ap.add_argument("--images-per-window", type=int, default=3)
     a = ap.parse_args()
-    # one shared bucket (aitv-media): Puddle Park may write only under puddle/ (ai-247 owns bulletins/ and pool/ at the root)
+    # one shared bucket (ai247-media): Puddle Park may write only under puddle/ (ai-247 owns bulletins/ and pool/ at the root)
     if not (a.prefix == "puddle/" or (a.prefix.startswith("puddle/") and a.prefix.endswith("/"))) or ".." in a.prefix:
         sys.exit(f"--prefix must be puddle/ or a folder under it, not {a.prefix!r}")
     global LIB

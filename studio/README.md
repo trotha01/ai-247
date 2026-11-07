@@ -73,12 +73,12 @@ After a restart nothing starts by itself yet: `run_llama.sh`, `run_channel_servi
 
 ## Accounts, storage and deploys
 
-- **Storage:** one R2 bucket, `aitv-media` on Trevor's Cloudflare account, shared by every channel, each under its own
+- **Storage:** one R2 bucket, `ai247-media` on Trevor's Cloudflare account, shared by every channel, each under its own
   prefix: ai-247 owns `bulletins/` and `pool/` at the root, Puddle Park owns `puddle/` (stream blocks, its replay pool
   at `puddle/pool/`, the showrunner's tunnel address at `puddle/showrunner/url.txt`). Nothing in `studio/` writes
   outside `puddle/`; `channel_worker.py` refuses any other `--prefix`.
 - **The box** holds only an R2 key for that bucket in `/hyperai/home/.r2.env` (root only): `R2_ACCOUNT_ID`,
-  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=aitv-media`. No Cloudflare Workers or Pages rights.
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=ai247-media`. No Cloudflare Workers or Pages rights.
 - **Workers** `puddle-live` (`cloudflare/puddle-live/`, the stream) and `puddle-showrunner` (`cloudflare/showrunner-link/`,
   the fixed link) live on Trevor's account and are deployed **only** by `.github/workflows/deploy-puddle.yml`, which is
   off until Trevor sets the repository variable `PUDDLE_DEPLOY_ENABLED=true`. Do not run `wrangler deploy` by hand.
