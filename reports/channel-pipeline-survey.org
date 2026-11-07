@@ -140,7 +140,8 @@ profile defaults to port 3080; Puddle Park's 3081 is its own override behind =ga
 | Blender text                 | no RTL or complex shaping (2nd-hand)                             | *no*                         |
 | Fonts                        | Noto Serif/Sans Hebrew: 31/31 te'amim, 24/24 niqqud, mark+mkmk (OFL); Cardo full coverage but no mkmk; Ezra SIL (OFL); SBL Hebrew commercial use needs a paid licence (2nd-hand) | Noto Serif Hebrew |
 
-Licence rules for the stream: NC material is out (ads or sponsorship break it; even a free channel is grey). SA data
+Licence rules for the stream (our reading of the licences, not legal advice; confirm with counsel before
+monetizing): NC material is out (ads or sponsorship break it; even a free channel is grey). SA data
 shown on screen can make the video an adaptation under BY-SA, so use the PD originals behind SA layers. Every CC BY
 source needs a recurring on-screen credit card and a description line; the =provenance= field in the node contract
 below carries that.
@@ -151,9 +152,10 @@ below carries that.
 |----------+--------------------------------------+-----------------------------------------------------------------+--------------------------------|
 | Latin    | Ecclesiastical (default), Classical  | own Italianate rules; Classical from espeak-ng =la= or CLTK 1.x, vowel length from Collatinus | Piper it_IT       |
 | Greek    | reconstructed Koine (default), Erasmian, restored Attic | own Koine rules (close to Modern Greek); Erasmian by rule; Attic from espeak-ng =grc= | Piper el_GR |
-| Hebrew   | Israeli-Sephardi                     | own niqqud-to-IPA rules: dagesh, shewa na/nach and qamets qatan from OSHB morphology; stress from the te'amim | piper-he-noa or Chatterbox he |
+| Hebrew   | Israeli-Sephardi                     | own niqqud-to-IPA rules: dagesh, shewa na/nach and qamets qatan from OSHB morphology; stress from the te'amim | piper-he-noa (phoneme input) |
 
-Cache audio per verse and variety, review by ear, keep a hand-override lexicon. A deterministic =gloss-check= node
+Chatterbox (he, el) takes text only, so it ignores these rules and reads in its own modern accent; use it only as
+a last-resort fallback that a =result.json= warning makes visible. Cache audio per verse and variety, review by ear, keep a hand-override lexicon. A deterministic =gloss-check= node
 (every displayed form, lemma and parsing must exist in the corpus row it cites) is the language channel's version of
 AI-247's fact check.
 
