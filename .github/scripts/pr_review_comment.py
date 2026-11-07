@@ -10,9 +10,11 @@ Reads from the environment (set by .github/workflows/pr-review.yml):
   REVIEW_MODEL    model id, for the footer
 
 Exit status is the check result (EXIT_CODE): 0 = no blocking finding, 1 = blocking finding or a fork PR whose
-author is not allowlisted. A review that could not complete (the action step failed or returned no structured
-result) also exits 0, with a warning annotation and a comment saying that no verdict was reached and a human must
-review: an API outage or the action's turn cap should not block merges, but it must never read as a clean review.
+author is not allowlisted. A review whose action step FAILED (API outage, credit limit, an action error, the turn
+cap) also exits 0, with a warning annotation and a comment saying that no verdict was reached and a human must
+review: an outage should not block merges, but it must never read as a clean review. A step that SUCCEEDED but
+returned no structured result stays red: that is not an outage, the model may have been steered away from
+answering by the PR's own text, so it is treated as "not reviewed" until a re-run or a human verdict.
 Stdlib only; never prints secrets.
 """
 from __future__ import annotations
@@ -26,7 +28,7 @@ import urllib.request
 MARKER = "<!-- claude-pr-review -->"
 API = "https://api.github.com"
 # build() status -> job exit code. "incomplete" (the review did not run to a verdict) is deliberately 0: see the docstring.
-EXIT_CODE = {"ok": 0, "incomplete": 0, "blocking": 1, "skipped": 1}
+EXIT_CODE = {"ok": 0, "incomplete": 0, "blocking": 1, "skipped": 1, "noresult": 1}
 
 
 def gh(method: str, path: str, body: dict | None = None):
@@ -82,7 +84,7 @@ def build(repo: str, pr: str) -> tuple[str, str]:
             data = json.loads(raw)
         except json.JSONDecodeError:
             data = None
-    if outcome != "success" or not isinstance(data, dict):
+    if outcome != "success":
         md = (
             f"{MARKER}\n## Claude review: did not complete (no verdict)\n\n"
             f"The review step ended with outcome `{outcome or 'unknown'}` and returned no structured result: an API "
@@ -92,6 +94,14 @@ def build(repo: str, pr: str) -> tuple[str, str]:
             "job from the workflow run to get a verdict.\n"
         )
         return md, "incomplete"
+    if not isinstance(data, dict):
+        md = (
+            f"{MARKER}\n## Claude review: no structured result\n\n"
+            f"The review step succeeded but returned no structured result (see the [workflow run]({run_url})). "
+            "This is not treated as an outage: the PR's own text may have steered the model away from answering, so "
+            "**this check stays red** until a re-run produces a verdict or a maintainer reviews the PR by hand.\n"
+        )
+        return md, "noresult"
 
     blocking = data.get("blocking") or []
     non_blocking = data.get("non_blocking") or []
@@ -142,6 +152,8 @@ def main() -> int:
         print("::warning::Claude review did not complete: no verdict, a human must review this PR (re-run the job for a verdict)")
     elif status == "skipped":
         print("::error::Claude review not run: fork author is not on FORK_REVIEW_AUTHORS")
+    elif status == "noresult":
+        print("::error::Claude review: the step succeeded but returned no structured result; re-run the job or review by hand")
     elif status == "blocking":
         print("::error::Claude review: blocking finding")
     return EXIT_CODE[status]

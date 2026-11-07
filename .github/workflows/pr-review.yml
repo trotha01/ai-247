@@ -2,8 +2,9 @@ name: pr-review
 
 # Claude review of every non-draft pull request, posted as one sticky comment and reported as the
 # status check `claude-review`: red when there is a blocking finding (or a fork author is not allowlisted);
-# a run that could not complete (API outage, credit limit, the action's turn cap) passes with a warning
-# and a comment that says no verdict was reached, so a human reviews instead. See docs/CONTRIBUTING.md.
+# a run whose review step failed (API outage, credit limit, the action's turn cap) passes with a warning
+# and a comment that says no verdict was reached, so a human reviews instead; a step that succeeded without
+# a structured verdict stays red (the PR's text may have steered the model). See docs/CONTRIBUTING.md.
 #
 # Safety model. This runs on `pull_request_target`, so it has the repository secrets and the
 # base branch's copy of this file, for PRs from forks too. Because of that it NEVER checks out or

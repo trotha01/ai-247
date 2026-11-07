@@ -21,9 +21,11 @@ Short version: branch, open a pull request, make the checks green, merge. Nothin
    It uses `claude-haiku-5-5`, read-only tools, a turn cap and a diff cap, so a run costs cents. Draft PRs are
    skipped; mark the PR ready for review to trigger it.
 
-   If the review itself could not complete (API outage, credit limit, the action's turn cap on a very large diff),
-   the comment says "did not complete (no verdict)" and the check passes with a warning instead of blocking the
-   merge. That is not a clean review: a maintainer reads the PR by hand, or re-runs the job for a verdict.
+   If the review step itself failed (API outage, credit limit, the action's turn cap on a very large diff), the
+   comment says "did not complete (no verdict)" and the check passes with a warning instead of blocking the merge.
+   That is not a clean review: a maintainer reads the PR by hand, or re-runs the job for a verdict. If the step
+   succeeded but Claude returned no structured verdict, the check stays red: the PR's own text may have steered
+   the model, so a maintainer re-runs the job or reviews by hand.
 
    Safety: the job runs on `pull_request_target`, so it holds the repository's `ANTHROPIC_API_KEY`. It
    therefore never checks out or executes PR code. It checks out the base branch and fetches the PR as a diff
