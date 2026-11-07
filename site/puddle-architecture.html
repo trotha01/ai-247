@@ -147,13 +147,13 @@ const NODES=[
   out:"Objects read by the two Workers",
   files:["docs/R2_LAYOUT.md"],
   model:"None"}],
- ["wk",R,604,W,H,"Worker playlist","aitv-live · worker/src",{
+ ["wk",R,604,W,H,"Worker playlist","puddle-live · worker/src",{
   role:"This repo's Worker deployed unchanged with PREFIX=puddle/. Builds a sliding-window live HLS playlist from the manifest, checks that upcoming segments exist, proxies segments, and fails over to the replay pool when the manifest is 30 min old.",
-  runs:"Cloudflare Worker aitv-live",
+  runs:"Cloudflare Worker puddle-live, deployed only by the gated deploy-puddle workflow",
   trigger:"Every player request for live.m3u8 or a segment (hls.js polls the playlist).",
   in:"puddle/manifest.json, segment HEADs, puddle/pool/manifest.json",
   out:"live.m3u8 and proxied .ts segments",
-  files:["worker/src/index.js","worker/src/playlist.js","worker/src/channel.js","worker/src/failover.js","studio/cloudflare/aitv-live/wrangler.toml"],
+  files:["worker/src/index.js","worker/src/playlist.js","worker/src/channel.js","worker/src/failover.js","studio/cloudflare/puddle-live/wrangler.toml",".github/workflows/deploy-puddle.yml"],
   model:"None (WINDOW 5, MAX_MANIFEST_AGE_S 1800, CHECK_SEGMENTS 5)"}],
  ["link",L,694,W,H,"Showrunner link","redirect Worker",{
   role:"A fixed address for the studio. The studio's address changes on every restart, so this Worker reads the current one from R2 and redirects, or says the showrunner is offline.",

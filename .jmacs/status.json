@@ -1,1 +1,1 @@
-{"state": "running", "msg": "PR #52: green, then main gained studio/ (PRs #40-#44); merged main, links + path checks now against main; CI re-running before merge"}
+{"state":"running","msg":"Page live (PR #52 merged): https://ai-247.pages.dev/puddle-architecture.html; follow-up PR renames the Worker to puddle-live after #54"}

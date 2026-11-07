@@ -74,7 +74,7 @@ const overlap = (a, b, pad = 0) => a.x < b.x + b.w - pad && b.x < a.x + a.w - pa
       check(`${tag} no JS/console/request errors`, errors.length === 0, errors.join(" | "));
       if (shots) { fs.mkdirSync(shots, { recursive: true }); await page.click('.n[data-id="writer"]'); await page.screenshot({ path: path.join(shots, `puddle-architecture-${scheme}-${width}.png`), fullPage: true }); }
       if (scheme === "light") {
-        const files = await page.evaluate(() => [...new Set([...document.querySelectorAll("script")].map((s) => s.textContent.match(/"(?:studio|newsbot|worker|docs|site)\/[^"]+"/g) || []).flat().map((s) => s.slice(1, -1)))]);
+        const files = await page.evaluate(() => [...new Set([...document.querySelectorAll("script")].map((s) => s.textContent.match(/"(?:studio|newsbot|worker|docs|site|\.github)\/[^"]+"/g) || []).flat().map((s) => s.slice(1, -1)))]);
         const missing = files.filter((f) => !fs.existsSync(path.join(repo, f)));
         check(`source files named on the page exist (${files.length})`, missing.length === 0, missing.join(" "));
       }
