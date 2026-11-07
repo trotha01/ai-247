@@ -1,0 +1,492 @@
+#!/usr/bin/env python3
+"""channel: the showrunner's control panel for the Puddle Park channel (runs on the GPU box).
+
+  channel status                 is everything running, is production keeping up, queue, image library, GPU/RAM
+  channel recent [N]             the last N scenes written (segment, title, cast, backdrop, card)
+  channel scene [NAME|last]      the full script of one scene (default: the newest)
+  channel frames [N]             grab N frames from what is on air right now; prints the image paths (look at them)
+  channel direct "TEXT"          give the producer a standing direction (it reads it within seconds)
+  channel notes                  the standing directions, numbered
+  channel unnote N               remove standing direction number N
+  channel brief                  print the channel brief (the producer's bible); edit the file it names to change it
+  channel library                ready backdrops and title cards, and images still being made
+  channel order backdrop|card NAME "PROMPT" [--text WORDS]   order a new image from MOSS (made between blocks)
+  channel logs producer|worker [N]
+  channel restart producer|worker   only when one is stuck or dead
+
+  New actions (the engineer agent builds them, the owners approve them):
+  channel propose "TITLE" "WHAT IT SHOULD DO"   file a request for a new action (showrunner)
+  channel proposals                             requests and their status: new, building, ready, live, rejected, failed
+  channel actions                               approved plug-in actions the producer can use now
+  channel proposal ID                           one request in full: text, history, engineer's notes and its code
+  channel submit ID FILE.py                     hand a finished, tested action in for review (engineer)
+  channel approve ID | reject ID "WHY" | retire ACTION    owners only, from a root login on the box
+
+Run as root, the commands act directly. Run as any other user (the showrunner agent), they are sent to the root-side
+service (`channel serve`, a Unix socket), which is the only way that user can touch the channel.
+"""
+import contextlib
+import io
+import json
+import os
+import pwd
+import shutil
+import struct
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+ROOT = Path("/hyperai/home/loop/puddle")
+LOOP = Path("/hyperai/home/loop")
+P = ROOT / "producer"
+STREAM = "https://aitv-live.mychalsimka.workers.dev"
+SOCK = "/hyperai/home/loop/channel.sock"
+PROPOSALS = ROOT / "proposals"
+ACTIONS_LIVE = ROOT / "actions" / "live"
+BUILTIN_ACTIONS = {"shot", "say", "hop", "move", "wave", "point", "look", "spawn", "bounce", "eat", "numeral"}
+# who may run what through the service (root runs anything directly on the box)
+READ = {"status", "recent", "scene", "frames", "notes", "brief", "library", "logs", "proposals", "actions", "proposal"}
+ALLOWED = {
+    "show": READ | {"direct", "unnote", "order", "restart", "propose"},
+    "eng": READ | {"submit"},
+    "gate": {"notes", "recent", "proposals"},
+}
+sys.path.insert(0, "/hyperai/home/kids-test/blender")
+
+
+def sh(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip()
+
+
+def fetch(url) -> bytes:
+    """curl, not urllib: the box's resolver returns a bad IPv4 address for workers.dev and only curl gets through."""
+    r = subprocess.run(["curl", "-sf", "-m", "30", "--retry", "5", "--retry-all-errors", "--retry-delay", "1", url], capture_output=True)
+    if r.returncode:
+        raise RuntimeError(f"could not fetch {url} (curl exit {r.returncode})")
+    return r.stdout
+
+
+def running(pattern):
+    return bool(sh(f"pgrep -f {pattern}"))
+
+
+def lib():
+    import backdrops
+    return backdrops.Library(ROOT / "library")
+
+
+def status(_):
+    print(f"producer: {'running' if running('producer_loop.py') else 'STOPPED'}   "
+          f"worker: {'running' if running('channel_worker.py') else 'STOPPED'}   "
+          f"llama-server (Qwen): {'running' if running('llama-server') else 'STOPPED'}")
+    if (ROOT / "STOP").exists():
+        print("STOP file present: both loops are told to stop")
+    lines = [l for l in (ROOT / "worker.log").read_text().splitlines() if "ON AIR" in l]
+    if lines:
+        print("last block on air:", lines[-1][:120])
+        recent = lines[-10:]
+        mins = sum(float(l.split(" scenes, ")[1].split(" min")[0]) for l in recent if " scenes, " in l)
+        t0, t1 = recent[0][:8], recent[-1][:8]
+        span = (time.mktime(time.strptime(t1, "%H:%M:%S")) - time.mktime(time.strptime(t0, "%H:%M:%S"))) % 86400
+        if span > 0 and len(recent) > 1:
+            fresh = sum(float(l.split(" scenes, ")[1].split(" min")[0]) for l in recent[1:])
+            print(f"production speed over the last {len(recent)} blocks: {fresh * 60 / span:.2f}x real time "
+                  f"(below 1.0 means viewers see some replays)")
+    fails = [l for l in (ROOT / "worker.log").read_text().splitlines()[-200:] if "FAILED" in l]
+    print(f"scenes queued: {len(list((ROOT / 'inbox').glob('*.json')))}   failed scenes (total): "
+          f"{len(list((ROOT / 'failed').glob('*.json')))}   recent failures in log: {len(fails)}")
+    L = lib()
+    print(f"image library: {len(L.ready('backdrop'))} backdrops, {len(L.ready('card'))} cards ready, {len(L.pending())} being made")
+    print("GPU:", sh("nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader"),
+          "  RAM:", sh("free -g | awk 'NR==2{print $3\"/\"$2\" GB used\"}'"))
+    try:
+        h = json.loads(fetch(STREAM + "/healthz"))
+        print(f"stream: ok={h.get('ok')} source={h.get('source')} manifest age {h.get('manifest', {}).get('age_s')}s")
+    except Exception as e:
+        print("stream health check failed:", e)
+
+
+def recent(args):
+    n = int(args[0]) if args else 10
+    for l in (P / "history.jsonl").read_text().splitlines()[-n:]:
+        d = json.loads(l)
+        print(f"- {time.strftime('%H:%M', time.localtime(d['t']))} [{d['segment']}] {d['title']} ({', '.join(d['cast'])})"
+              f"  {d.get('file', '')}")
+
+
+def scene(args):
+    files = sorted(list((ROOT / "done").glob("*.json")) + list((ROOT / "inbox").glob("*.json")), key=lambda p: p.stat().st_mtime)
+    if args and args[0] != "last":
+        files = [f for f in files if args[0] in f.name]
+    if not files:
+        sys.exit("no such scene")
+    f = files[-1]
+    d = json.loads(f.read_text())
+    print(f.name)
+    print(json.dumps({k: d[k] for k in ("title", "segment", "backdrop", "card") if k in d}))
+    print("cast:", ", ".join(d["cast"]))
+    for e in d["timeline"]:
+        rest = {k: v for k, v in e.items() if k not in ("t", "do")}
+        print(f"  {e['t']:5.1f}  {e['do']:8} {json.dumps(rest)}")
+
+
+def r2():
+    """boto3 client for the channel's R2 bucket (keys from the root-only .r2.env)."""
+    import boto3
+    env = dict(l.split("=", 1) for l in Path("/hyperai/home/.r2.env").read_text().split() if "=" in l)
+    c = boto3.client("s3", endpoint_url=f"https://{env['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+                     aws_access_key_id=env["R2_ACCESS_KEY_ID"], aws_secret_access_key=env["R2_SECRET_ACCESS_KEY"],
+                     region_name="auto")
+    return c, env["R2_BUCKET"]
+
+
+def frames(args):
+    """Frames of the segments on air right now, found exactly as the Worker finds them, read straight from R2."""
+    n = int(args[0]) if args else 4
+    sys.path.insert(0, "/hyperai/home/ai-247")
+    from newsbot import channel as ch
+    c, bucket = r2()
+    m = json.loads(c.get_object(Bucket=bucket, Key="puddle/manifest.json")["Body"].read())
+    k = ch.live_k(time.time())
+    out = ROOT / "frames"
+    out.mkdir(exist_ok=True)
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    paths = []
+    for i in range(n):
+        uri = ch.segment_at(m, k + i)["uri"]
+        tmp = Path(f"/tmp/sr_{i}.ts")
+        c.download_file(bucket, "puddle/" + uri, str(tmp))
+        p = out / f"{ts}_{i}.jpg"
+        subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-ss", "3", "-i", str(tmp), "-frames:v", "1",
+                        "-vf", "scale=960:-1", str(p)], check=True)
+        paths.append(p)
+    for old in sorted(out.glob("*.jpg"))[:-40]:
+        old.unlink()
+    print(f"frames from what is on air now, about 6 s apart (segment {k} onward):")
+    for p in paths:
+        print(" ", p)
+
+
+def direct(args):
+    text = " ".join(args).strip()
+    if not text:
+        sys.exit('usage: channel direct "TEXT"')
+    d = P / "directions"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{int(time.time() * 1000)}.md").write_text(text + "\n")
+    print("sent; the producer adds it to the standing directions within a few seconds")
+
+
+def notes(_):
+    lines = [l for l in (P / "notes.md").read_text().splitlines() if l.strip()]
+    if not lines:
+        print("(no standing directions)")
+    for i, l in enumerate(lines, 1):
+        print(f"{i}. {l}")
+
+
+def unnote(args):
+    lines = [l for l in (P / "notes.md").read_text().splitlines() if l.strip()]
+    i = int(args[0]) - 1
+    gone = lines.pop(i)
+    (P / "notes.md").write_text("".join(l + "\n" for l in lines))
+    print("removed:", gone)
+
+
+def brief(_):
+    print(f"(file: {P / 'brief.md'})\n")
+    print((P / "brief.md").read_text())
+
+
+def library(_):
+    L = lib()
+    for kind in ("backdrop", "card"):
+        print(f"{kind}s ready:")
+        for k, v in L.ready(kind).items():
+            print(f"  {k}: {v.get('text') or ''} {v['prompt'][:100]}  ({L.img / (k + '.png')})")
+    pend = L.pending()
+    print("being made:", ", ".join(f"{r['kind']} {r['name']}" for r in pend) or "nothing")
+
+
+def order(args):
+    text = None
+    if "--text" in args:
+        i = args.index("--text")
+        text = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    kind, name, prompt = args[0], args[1], " ".join(args[2:])
+    got = lib().request(name, kind, prompt, text=text)
+    print(f"ordered {kind} {got}; MOSS makes it between blocks (a window opens at most every 10 minutes)" if got
+          else "not ordered: need kind backdrop|card, a name, a prompt, and --text for cards")
+
+
+def logs(args):
+    which = args[0] if args else "worker"
+    n = int(args[1]) if len(args) > 1 else 20
+    print(sh(f"tail -n {n} {ROOT / (which + '.log')}"))
+
+
+def restart(args):
+    which = args[0]
+    if which not in ("producer", "worker"):
+        sys.exit("restart producer|worker")
+    pat = {"producer": "producer_loop.py", "worker": "channel_worker.py"}[which]
+    sh(f"pkill -f {pat}")
+    time.sleep(2)
+    extra = " --block 4 --renders 4" if which == "worker" else ""
+    print(sh(f"{LOOP}/run_{which}.sh{extra}"))
+
+
+
+def _slug(s, n=30):
+    import re
+    return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")[:n] or "x"
+
+
+def _load(pid):
+    f = PROPOSALS / pid / "request.json"
+    if not f.exists():
+        sys.exit(f"no proposal {pid}")
+    return json.loads(f.read_text())
+
+
+def _save(d, event):
+    d.setdefault("history", []).append(f"{time.strftime('%Y-%m-%d %H:%M')} {event}")
+    f = PROPOSALS / d["id"] / "request.json"
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=1))
+    tmp.rename(f)
+
+
+def action_meta(path):
+    """ACTION, DESCRIPTION, NEEDS, PARAMS of a plug-in, read with ast: never imported or run here."""
+    import ast
+    tree = ast.parse(Path(path).read_text())
+    meta = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id in ("ACTION", "DESCRIPTION", "NEEDS", "PARAMS"):
+                meta[node.targets[0].id] = ast.literal_eval(node.value)
+    has_run = any(isinstance(n, ast.FunctionDef) and n.name == "run" for n in tree.body)
+    return meta, has_run
+
+
+def propose(args):
+    if len(args) < 2:
+        sys.exit('usage: channel propose "TITLE" "WHAT IT SHOULD DO"')
+    title, what = args[0].strip()[:120], " ".join(args[1:]).strip()[:2000]
+    pid = time.strftime("%Y%m%d-%H%M%S") + "-" + _slug(title)
+    (PROPOSALS / pid).mkdir(parents=True, exist_ok=True)
+    _save({"id": pid, "title": title, "what": what, "status": "new", "created": time.time()}, "filed")
+    print(f"filed {pid}: the engineer picks it up within a minute; the owners approve it before it airs")
+
+
+def proposals(args):
+    items = sorted(PROPOSALS.glob("*/request.json"))[-15:] if PROPOSALS.exists() else []
+    if not items:
+        print("(no requests)")
+    for f in items:
+        d = json.loads(f.read_text())
+        extra = ""
+        if d["status"] in ("ready", "live"):
+            extra = f"  action: {d.get('action')}  preview: {f.parent / 'review.jpg'}"
+        if d.get("reason"):
+            extra += f"  ({d['reason'][:160]})"
+        print(f"- [{d['status']}] {d['id']}: {d['title']}{extra}")
+
+
+def proposal(args):
+    d = _load(args[0])
+    print(f"{d['id']} [{d['status']}]: {d['title']}\n\nWhat it should do: {d['what']}\n")
+    print("History:\n  " + "\n  ".join(d.get("history", [])))
+    for name in ("notes.md", "action.py"):
+        f = PROPOSALS / d["id"] / name
+        if f.exists():
+            print(f"\n----- {name}\n{f.read_text()}")
+
+
+def actions(args):
+    files = sorted(ACTIONS_LIVE.glob("*.py")) if ACTIONS_LIVE.exists() else []
+    if not files:
+        print("(no plug-in actions yet)")
+    for f in files:
+        meta, _ = action_meta(f)
+        print(f"- {meta.get('PARAMS', meta.get('ACTION'))}: {meta.get('DESCRIPTION', '')}")
+
+
+def submit(args):
+    pid, src = args[0], Path(args[1])
+    eng_root = Path("/output/eng/work").resolve()
+
+    def inside(f):  # a real file inside the engineer's work folder: no links, nothing else on the machine
+        return f.exists() and not f.is_symlink() and f.is_file() and eng_root in f.resolve().parents
+
+    if not inside(src):
+        sys.exit(f"not submitted: {src} must be a file in {eng_root}")
+    d = _load(pid)
+    if d["status"] not in ("building", "new", "rejected", "failed"):
+        sys.exit(f"{pid} is {d['status']}, not open for submission")
+    meta, has_run = action_meta(src)
+    missing = [k for k in ("ACTION", "DESCRIPTION", "NEEDS", "PARAMS") if k not in meta] + ([] if has_run else ["run()"])
+    if missing:
+        sys.exit("not submitted, the file is missing: " + ", ".join(missing))
+    name = meta["ACTION"]
+    if name != _slug(name) or name in BUILTIN_ACTIONS:
+        sys.exit(f"not submitted: ACTION must be a new lowercase_name, not {name!r}")
+    grid = src.parent / "review.jpg"
+    if not inside(grid):
+        sys.exit(f"not submitted: run eng-test first; it leaves review.jpg next to {src.name}")
+    dst = PROPOSALS / pid
+    shutil.copy(src, dst / "action.py")
+    shutil.copy(grid, dst / "review.jpg")
+    for extra in ("test_scene.json", "notes.md"):
+        if inside(src.parent / extra):
+            shutil.copy(src.parent / extra, dst / extra)
+    d.update(status="ready", action=name, reason=None)
+    _save(d, f"submitted action {name}")
+    print(f"submitted {name}: waiting for an owner to approve. Preview: {dst / 'review.jpg'}")
+
+
+def approve(args):
+    d = _load(args[0])
+    if d["status"] != "ready":
+        sys.exit(f"{d['id']} is {d['status']}, not ready")
+    ACTIONS_LIVE.mkdir(parents=True, exist_ok=True)
+    shutil.copy(PROPOSALS / d["id"] / "action.py", ACTIONS_LIVE / f"{d['action']}.py")
+    d["status"] = "live"
+    _save(d, "approved by owner")
+    print(f"{d['action']} is live: the producer can use it from its next scene")
+
+
+def reject(args):
+    d = _load(args[0])
+    d.update(status="rejected", reason=" ".join(args[1:]) or "rejected by owner")
+    _save(d, "rejected: " + d["reason"])
+    print(f"rejected {d['id']}")
+
+
+def retire(args):
+    f = ACTIONS_LIVE / f"{_slug(args[0])}.py"
+    if not f.exists():
+        sys.exit(f"no live action {args[0]}")
+    f.unlink()
+    print(f"retired {args[0]}: the producer stops using it from its next scene")
+
+
+CMDS = {"status": status, "recent": recent, "scene": scene, "frames": frames, "direct": direct, "notes": notes,
+        "unnote": unnote, "brief": brief, "library": library, "order": order, "logs": logs, "restart": restart,
+        "propose": propose, "proposals": proposals, "proposal": proposal, "actions": actions, "submit": submit, "approve": approve,
+        "reject": reject, "retire": retire}
+
+class _ThreadOut:
+    """sys.stdout that writes to the calling thread's buffer, so parallel requests do not mix their output."""
+    def __init__(self, real):
+        import threading
+        self.real, self.local = real, threading.local()
+
+    def write(self, s):
+        return (getattr(self.local, "buf", None) or self.real).write(s)
+
+    def flush(self):
+        (getattr(self.local, "buf", None) or self.real).flush()
+
+
+def run_local(argv) -> tuple[int, str]:
+    """Run one command in this process, capturing its output (per thread)."""
+    if not isinstance(sys.stdout, _ThreadOut):
+        sys.stdout = _ThreadOut(sys.stdout)
+    buf = io.StringIO()
+    sys.stdout.local.buf = buf
+    code = 0
+    try:
+        CMDS[argv[0]](argv[1:])
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+        if isinstance(e.code, str):
+            print(e.code)
+    except Exception as e:
+        code = 1
+        print(f"error: {e!r}")
+    finally:
+        sys.stdout.local.buf = None
+    return code, buf.getvalue()
+
+
+def handle(conn):
+    """One request on its own thread: a slow command (frames) never blocks the others, and a client that hangs up
+    (the studio page gives up after 20 s) only ends its own request."""
+    with conn:
+        try:
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = conn.recv(65536)
+                if not chunk:
+                    return
+                data += chunk
+            argv = json.loads(data)["argv"]
+            uid = struct.unpack("3i", conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))[1]
+            try:
+                who = pwd.getpwuid(uid).pw_name
+            except KeyError:
+                who = str(uid)
+            if not argv or argv[0] not in CMDS or argv[0] == "serve" or not all(isinstance(a, str) for a in argv):
+                code, out = 1, __doc__
+            elif argv[0] not in ALLOWED.get(who, set()):
+                code, out = 1, f"'{argv[0]}' is not available to {who}\n"
+            else:
+                with RUN_LOCK if argv[0] in ("restart", "frames", "order", "direct", "unnote") else NO_LOCK:
+                    code, out = run_local(argv)
+            print(time.strftime("%H:%M:%S"), who, "channel", " ".join(argv)[:200], "->", code, flush=True)
+            conn.sendall(json.dumps({"code": code, "out": out}).encode())
+        except Exception as e:
+            print(time.strftime("%H:%M:%S"), "request dropped:", repr(e)[:200], flush=True)
+
+
+def serve(_):
+    """Root-side service: one JSON request {argv} per connection, answers {code, out}. Threads per request."""
+    import threading
+    global RUN_LOCK, NO_LOCK
+    RUN_LOCK, NO_LOCK = threading.Lock(), contextlib.nullcontext()
+    if os.path.exists(SOCK):
+        os.unlink(SOCK)
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(SOCK)
+    os.chmod(SOCK, 0o666)
+    srv.listen(32)
+    print("channel service on", SOCK, flush=True)
+    while True:
+        conn, _ = srv.accept()
+        threading.Thread(target=handle, args=(conn,), daemon=True).start()
+
+
+def via_service(argv):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(300)
+    try:
+        s.connect(SOCK)
+    except OSError:
+        sys.exit("the channel service is not running (an admin starts it with: channel serve)")
+    s.sendall(json.dumps({"argv": argv}).encode() + b"\n")
+    data = b""
+    while True:
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        data += chunk
+    r = json.loads(data)
+    print(r["out"], end="")
+    sys.exit(r["code"])
+
+
+CMDS["serve"] = serve
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
+        print(__doc__)
+        sys.exit(0 if len(sys.argv) < 2 else 1)
+    if os.geteuid() != 0:
+        via_service(sys.argv[1:])
+    CMDS[sys.argv[1]](sys.argv[2:])
