@@ -63,5 +63,23 @@ def rank(items, n: int = 12, now: float | None = None, per_source: int = PER_SOU
     return chosen
 
 
+def interleave_sources(ranked: list) -> list:
+    """Round-robin the ranked list by source: the best story of each source first (in rank order of those bests), then
+    every source's second story, and so on. Same set, same per-source order; only the global order changes, so any
+    prefix of the result spans as many sources as it can. Used by the hourly slices (per-source cap 4): the episode's
+    time budget keeps the first 8-9 of 12 stories, and in plain rank order those came from 3 sources on run
+    42298386727 (4 + 4 + 1), which the acceptance floor of 4 sources then rejected."""
+    by_source: dict[str, list] = {}
+    for it in ranked:
+        by_source.setdefault(it.source, []).append(it)
+    out, depth = [], 0
+    while len(out) < len(ranked):
+        for src in by_source:   # dict order = order of each source's first (best) story
+            if depth < len(by_source[src]):
+                out.append(by_source[src][depth])
+        depth += 1
+    return out
+
+
 def explain(items, now: float) -> list[dict]:
     return [{"source": i.source, "title": i.title, "published": i.published, "score": score(i, now)} for i in items]

@@ -259,3 +259,23 @@ Cron: the `hourly-bulletins` file reached `main` at 15:47Z; the 16:23Z slot prod
 - slice 5: the apt install stall (three bounded attempts of 120-144 s each, no output), the same runner-side symptom seen on `ci` and `day1-episode` all day; the coverage worker's bounded-retry install already handles it when the mirror recovers within the step budget.
 
 **Caveat: the scheduler is still unreliable for this repository.** 0 events for the 12:23Z-18:23Z slots (five slots, `main` pushed seven times meanwhile), then one event for 21:23Z (2 h 38 min after the last push to `main`), then none for 22:23Z, 23:23Z and 00:23Z. Checks that rule out the repo side, from the API and git: every workflow `active`; the gate variable unset (printed by the run itself); every PR merged by `trotha01` and every push run on `main` has `actor` `trotha01`; not a fork, not archived, public, owner type User; concurrency queues rather than cancels. Community reports (#203473, #185355) describe the same silence on brand-new repositories and a GitHub-side regression; the external-cron workaround those posters used is a Cloudflare Cron Trigger (free) on a Worker that POSTs `/repos/trotha01/ai-247/actions/workflows/hourly.yml/dispatches` with a fine-grained PAT (Actions: read and write, this repository) kept as a Worker secret. That needs Trevor's token and decision. Until then the channel gets new footage on whatever slots GitHub honours plus manual dispatches; the 4-hour stale-manifest failover and the replay loop keep it on air.
+
+## Scheduled run 1 fixed: degrade gracefully (2026-11-07, `cloud/ai247-hourlyfix`)
+
+Two details of run 42298386727 beyond the section above, from the job logs. (a) The 9 aired stories of slices 0 and 2 came from 3 sources because the rundown is in **rank order** with the hourly per-source cap of 4: the top 9 of 12 were 4 + 4 + 1, so the floor was met by neither slice although each had 5 sources to draw on. (b) Slice 5's install was not a silent stall: on attempt 3 the small packages were installed after 23 s (needrestart printed), then the **`ffmpeg` install hit the 120 s `timeout`** (about 100 MB of packages from a slow mirror with six jobs starting at once); attempts 1 and 2 failed at 125 s and 122 s. Not secrets (aired memory read from R2, slice 0 written by `claude-haiku-5-5`, stitch published), not the `inputs` defaults on the schedule event (`SLICES=6 LLM_SLICES=1`), not the budget guard, not concurrency.
+
+Fix (this PR), so a scheduled run always publishes what it can and its verdict says whether it did:
+- `newsbot/rank.py: interleave_sources` and `NEWSBOT_RUNDOWN_INTERLEAVE=1` in the render job: the rundown is round-robined by source (best story of each source first, then each source's second, ...), same set and same per-source order, so the 8-9 stories that fit 10 minutes span every source the slice has. Unit-tested on the 4 + 4 + 1 case. The slice floor stays at `NEWSBOT_MIN_SOURCES=3` (PR #36) as a safety net for a short supply.
+- Install step (`hourly.yml`, `ci.yml`): apt installs 180 s / ffmpeg 240 s instead of 120 s, the failing stage is named in the log, `dpkg --configure -a` before a retry. A static ffmpeg build from GitHub releases as a last resort (BtbN/FFmpeg-Builds, n8.1 gpl, 152 MB, 16 s to download and unpack from a session; the seam tests pass with it locally) was tried and dropped in review: it fetched the rolling `latest` asset and ran `sudo install` with no checksum, on `pull_request` in ci.yml. It can come back only with a pinned release tag and a SHA-256 verified before install. The protective dispatch 42321630781 lost its slice 5 the same way (small packages done after 16 s, then ffmpeg silent for 120 s on all three attempts), so the mirror stall is not rare. Worst case per attempt 12.3 min inside the 20-minute step.
+- Verdict: the render matrix is `continue-on-error: true`; the stitch job warns per planned slice without a bulletin (`::warning::slice N rendered no bulletin`), publishes what rendered (unchanged), and fails only when nothing rendered. A scheduled run is green whenever it publishes, with the shortfall in the run annotations and the job summary.
+
+Protective dispatch: the live manifest (uploaded 21:53:28Z) was 11,157 s old at 00:59Z against `MAX_MANIFEST_AGE_S` 14400 (failover at 01:53Z), so run **42321630781** was dispatched from `main` at 01:00:44Z before the fix.
+
+### Watch log (schedule slots)
+
+| Slot (UTC) | Fired? | Run | Result |
+|---|---|---|---|
+| 21:23 Nov 6 | yes, at 21:38:28Z | 42298386727 | failure (3 of 6 slices; 30 min published) |
+| 22:23, 23:23, 00:23 | no (checked 00:59Z) | | |
+| 01:23 Nov 7 | pending | | |
+| 02:23 Nov 7 | pending | | |

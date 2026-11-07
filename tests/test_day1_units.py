@@ -39,6 +39,21 @@ def test_rank_dedupes_and_caps_per_source():
     assert rank.rank([mk("OpenAI", "thin", "u")] and [feeds.Item("OpenAI", "t", "short", "u", "", now)], 5, now) == []
 
 
+def test_interleave_sources_spreads_every_prefix_and_keeps_per_source_order():
+    now = time.time()
+    mk = lambda src, i: feeds.Item(src, f"{src} story {i} alpha{i} beta{i}", "y" * 200, f"https://a/{src}/{i}", "", now - 100)
+    # the hourly case: cap 4 per source, 12 ranked from 5 sources, so plain rank order starts with 4 + 4 + 1
+    ranked = [mk("arXiv cs.AI", i) for i in range(4)] + [mk("OpenAI", i) for i in range(4)] + [mk("Google AI", 0)] + \
+             [mk("NVIDIA Developer", 0), mk("Hugging Face", 0), mk("Hugging Face", 1)]
+    got = rank.interleave_sources(ranked)
+    assert sorted(i.url for i in got) == sorted(i.url for i in ranked) and len(got) == 12
+    assert [i.source for i in got[:5]] == ["arXiv cs.AI", "OpenAI", "Google AI", "NVIDIA Developer", "Hugging Face"]
+    assert len({i.source for i in got[:9]}) == 5   # the 9 that fit a 10-minute slice span every source
+    for src in {i.source for i in ranked}:   # within a source, rank order is unchanged
+        assert [i.url for i in got if i.source == src] == [i.url for i in ranked if i.source == src]
+    assert rank.interleave_sources([]) == []
+
+
 # ---------- LLM path with a scripted client ----------
 class Scripted:
     """Minimal stand-in for anthropic.Anthropic(): handler(system, user) -> reply text (recorded behaviour)."""
