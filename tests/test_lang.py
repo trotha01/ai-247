@@ -165,3 +165,10 @@ def test_r2_secret_with_dashes_is_normalized():
     assert not normalize_r2_secret(env) and env["R2_SECRET_ACCESS_KEY"] == good
     env = {"R2_SECRET_ACCESS_KEY": "abc-def"}            # not a 64-hex key underneath: left alone
     assert not normalize_r2_secret(env) and env["R2_SECRET_ACCESS_KEY"] == "abc-def"
+
+
+def test_worker_paces_to_real_time():
+    from lang.channel_worker import pace_wait
+    assert pace_wait(780.0, 300) == 480.0
+    assert pace_wait(120.0, 300) == 0.0
+    assert pace_wait("dry-run", 300) == 0.0 and pace_wait(None, 300) == 0.0
