@@ -154,3 +154,14 @@ def test_worker_prunes_local_cache(tmp_path):
         os.utime(d, (i, i))
     assert prune_local(tmp_path, 1500) == 2
     assert [p.name for p in (tmp_path / "work").iterdir()] == ["b2"]
+
+
+def test_r2_secret_with_dashes_is_normalized():
+    from lang.channel_worker import normalize_r2_secret
+    good = "0123456789abcdef" * 4
+    env = {"R2_SECRET_ACCESS_KEY": good[:31] + "-" + good[31:53] + "-" + good[53:]}
+    assert normalize_r2_secret(env) and env["R2_SECRET_ACCESS_KEY"] == good
+    env = {"R2_SECRET_ACCESS_KEY": good}
+    assert not normalize_r2_secret(env) and env["R2_SECRET_ACCESS_KEY"] == good
+    env = {"R2_SECRET_ACCESS_KEY": "abc-def"}            # not a 64-hex key underneath: left alone
+    assert not normalize_r2_secret(env) and env["R2_SECRET_ACCESS_KEY"] == "abc-def"

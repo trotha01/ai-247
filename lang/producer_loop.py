@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Producer loop for the language channel: keeps the worker's inbox TARGET lesson scripts deep, forever.
 
-    python -m lang.producer_loop --root $CHANNELS_ROOT/lang/run
+    python -m lang.producer_loop --root /srv/channels/lang/run   # ROOT/lang/run of deploy/box/install.sh
 
 Same shape as studio/pipeline/producer_loop.py (queue of finished work ahead of the worker), but no LLM: each lesson
 is lang.lesson.lesson(n), deterministic from the committed pool. The next lesson number lives in ROOT/producer/next_n,

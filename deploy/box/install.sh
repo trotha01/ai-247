@@ -72,8 +72,9 @@ systemctl --user daemon-reload
 if [ ! -s "$ROOT/$CH/r2.env" ]; then
   log "installed, NOT started: create $ROOT/$CH/r2.env (mode 600) with the R2_* keys, then re-run this script"; exit 3
 fi
-chmod 600 "$ROOT/$CH/r2.env"
+# keep the owner's mode (e.g. 660 for a shared group) unless the file is readable by everyone
+[ "$(stat -c %a "$ROOT/$CH/r2.env" 2>/dev/null | cut -c3)" = 0 ] || chmod 600 "$ROOT/$CH/r2.env"
 systemctl --user enable "${UNITS[@]}" > /dev/null
 systemctl --user restart "${UNITS[@]}"
-systemctl --user --no-pager --lines=0 status "${UNITS[@]}" | grep -E "●|Active:"
+systemctl --user --no-pager --lines=0 status "${UNITS[@]}" | grep -E "●|Active:" || true
 log "running; logs: journalctl --user -fu ${UNITS[-1]%.service}"
