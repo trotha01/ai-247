@@ -38,7 +38,7 @@ from .contract import read_result, write_node_yaml
 REPO = Path(__file__).resolve().parents[1]
 CHANNELS = REPO / "channels"
 STAGES = ("producer", "item", "block")
-CADENCE = {"queue_ahead": 3, "block_items": 1, "max_wait": 180, "produce_every": 0, "poll": 3}
+CADENCE = {"queue_ahead": 3, "block_items": 1, "max_wait": 180, "produce_every": 0, "poll": 3, "ahead_s": 0}
 EVENTS_CAP = 5_000_000
 
 
@@ -309,8 +309,26 @@ class Runner:
         log(f"ON AIR block {ts}: {len(ok_items)} item(s) | {pub.get('log', '')[:160]}")
         self.save_status(blocks=self.status["blocks"] + 1, items=self.status["items"] + len(ok_items),
                          last_publish=time.time(), last_publish_log=pub.get("log", "")[:300])
+        self.pace(bdir, len(self.ch["block"]) - 1)
         shutil.rmtree(bdir, ignore_errors=True)
         return True
+
+    def pace(self, bdir: Path, i: int):
+        """Real-time pacing (#63): after a publish, wait until at most cadence.ahead_s seconds of fresh footage are
+        unplayed (fresh_seconds from the publish node's publish.json). ahead_s 0 = off."""
+        ahead = float(self.cad.get("ahead_s") or 0)
+        if not ahead or self.max_blocks:
+            return
+        try:
+            fresh = float(json.loads((bdir / f"b{i:02d}-publish" / "publish.json").read_text()).get("fresh_seconds"))
+        except Exception:
+            return
+        wait = max(0.0, fresh - ahead)
+        if wait:
+            log(f"{fresh:.0f} s of fresh footage unplayed: waiting {wait:.0f} s (real-time pacing, ahead_s {ahead:.0f})")
+            end = time.time() + wait
+            while time.time() < end and not self.stopping():
+                self.stop_ev.wait(min(10, end - time.time()))
 
     def prune_local(self) -> int:
         cap = int(float(self.ch["storage"]["local_cap_gb"]) * 1e9)

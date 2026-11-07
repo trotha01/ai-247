@@ -10,6 +10,7 @@ cadence:
   block_items: 1          # lessons per published block (~45-60 s each)
   max_wait: 120           # publish a partial block once the oldest item waited this long
   produce_every: 0
+  ahead_s: 300            # real-time pacing: wait while more than 300 s of fresh lessons are unplayed (#63)
 storage:
   local_cap_gb: 3
 producer:

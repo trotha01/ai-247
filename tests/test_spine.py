@@ -60,11 +60,12 @@ def test_channel_by_name_from_repo_root(monkeypatch):
 
 
 def test_timeout_kills_node(tmp_path):
-    ch = chan(tmp_path, item=[{"node": "slow", "cmd": ["sleep", "30"], "in": ["script.json"], "out": ["clip.mp4"], "timeout": 1}])
+    ch = chan(tmp_path, item=[{"node": "slow", "cmd": ["sh", "-c", "sleep 30"], "in": ["script.json"], "out": ["clip.mp4"], "timeout": 1}])
     r = Runner(ch, tmp_path / "root", dry_run=True)
     t = time.time()
     res = r.run_step(ch["item"][0], tmp_path / "job", {})
-    assert res["status"] == "fail" and "timeout" in res["log"] and time.time() - t < 15
+    assert res["status"] == "fail" and "timeout" in res["log"], res
+    assert time.time() - t < 15
 
 
 def test_publish_real_branch_uses_prefix(tmp_path, monkeypatch):

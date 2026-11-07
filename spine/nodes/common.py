@@ -45,8 +45,9 @@ def publish(job: Job):
     if job.channel.get("dry_run") or os.environ.get("SPINE_DRY_RUN"):
         (job.out("publish.json")).write_text(json.dumps({"dry_run": True, "prefix": prefix, "outs": [str(o) for o in outs]}))
         return {"publish.json": job.out("publish.json")}, f"dry-run: would publish {len(outs)} block(s) to {prefix!r}"
-    from lang.channel_worker import PrefixS3, enforce_cap
+    from lang.channel_worker import PrefixS3, enforce_cap, normalize_r2_secret
     from newsbot import publish as pub, r2
+    normalize_r2_secret()  # a key pasted with dashes (#62); never printed
     if not r2.r2_configured():
         raise RuntimeError("R2_* environment not set (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET)")
     raw, bucket = r2.client(), r2.bucket()
