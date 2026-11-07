@@ -47,6 +47,12 @@ def test_deploy_puddle_is_gated_and_scoped():
     wd = sorted(l.split(":", 1)[1].strip() for l in lines if re.match(r"\s*workingDirectory:", l))
     assert wd == ["studio/cloudflare/puddle-live", "studio/cloudflare/showrunner-link"], wd
     assert all(l.split(":", 1)[1].strip() == "deploy" for l in lines if re.match(r"\s*command:", l))
+    # the player page: one gated step, Pages only, only studio/cloudflare/puddle-site, to puddle-park-tv
+    pages = [s for s in steps if "pages deploy" in s]
+    assert len(pages) == 1 and "if: steps.gate.outputs.ready == 'true'" in pages[0]
+    runs = [l for l in lines if "wrangler@4" in l]
+    assert runs and all(re.search(r"wrangler@4 pages (project (list|create)|deploy studio/cloudflare/puddle-site )", l) for l in runs), runs
+    assert "PAGES_PROJECT: puddle-park-tv" in text
 
 
 def test_puddle_configs_stay_in_the_shared_bucket_under_puddle():
