@@ -1,0 +1,4 @@
+# language channel render node (lang/render.py); the publisher's needs (boto3) are in the top-level requirements.txt
+piper-tts==1.8.0
+playwright==1.64.1
+numpy>=1.26

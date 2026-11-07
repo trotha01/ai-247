@@ -1,0 +1,62 @@
+name: deploy-lang
+
+# The language channel's Worker `lang-live` (lang/cloudflare/lang-live: this repo's worker/src with PREFIX=lang/,
+# bucket ai247-media). The player page is site/lang/ and ships with the main site (deploy.yml -> ai-247.pages.dev/lang/).
+# Off unless the repository variable LANG_DEPLOY_ENABLED is `true`; only on main; only when lang/cloudflare/ changed
+# (or a manual run). tests/test_lang.py checks the gate and that the config stays on ai247-media under lang/.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lang/cloudflare/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-lang
+  cancel-in-progress: false
+
+jobs:
+  deploy-lang:
+    if: github.repository == 'trotha01/ai-247' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Gate (LANG_DEPLOY_ENABLED and the Cloudflare secrets)
+        id: gate
+        env:
+          ENABLED: ${{ vars.LANG_DEPLOY_ENABLED }}
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "$ENABLED" != "true" ]; then
+            echo "::notice::LANG_DEPLOY_ENABLED is not 'true': language channel deploy is off (no-op)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set: skipping (no-op)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.ready == 'true'
+      - name: Config check (Worker name, shared bucket, lang/ prefix)
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          set -eu
+          L=lang/cloudflare/lang-live/wrangler.toml
+          grep -qx 'name = "lang-live"' $L && grep -qx 'bucket_name = "ai247-media"' $L && grep -qx 'PREFIX = "lang/"' $L
+          echo "config ok"
+      - name: Deploy lang-live
+        if: steps.gate.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: lang/cloudflare/lang-live
+          command: deploy
+      - name: Smoke test
+        if: steps.gate.outputs.ready == 'true'
+        run: curl -fsS --retry 5 --retry-delay 5 https://lang-live.trotha01.workers.dev/healthz

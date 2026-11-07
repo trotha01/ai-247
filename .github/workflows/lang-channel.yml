@@ -1,0 +1,65 @@
+name: lang-channel
+
+# Language channel producer + worker as a bounded cloud run, until the HyperAI box runs them for good
+# (deploy/box/lang/). Renders N lessons (lang.producer_loop + lang.channel_worker), publishes each as a block under
+# lang/ in ai247-media (segments first, lang/manifest.json last, earlier lessons kept looping as replays), then
+# refreshes the replay pool lang/pool/manifest.json from the newest complete blocks. The cron adds fresh lessons
+# every 4 h; between runs the live manifest loops the last ~30 lessons, and the Worker falls back to the pool if the
+# manifest goes stale. Stop the cron without a commit: repository variable LANG_CRON_ENABLED=false.
+on:
+  workflow_dispatch:
+    inputs:
+      lessons:
+        description: "lessons to render and publish (~45 s each)"
+        required: true
+        default: "30"
+  schedule:
+    - cron: "37 */4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lang-channel
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.repository == 'trotha01/ai-247' && (github.event_name != 'schedule' || vars.LANG_CRON_ENABLED != 'false')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      LESSONS: ${{ inputs.lessons || '12' }}
+      LANG_VOICES: ${{ github.workspace }}/voices
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (ffmpeg, Piper, Chromium)
+        run: |
+          set -eu
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install -q -r requirements.txt -r lang/requirements.txt
+          python -m playwright install --with-deps chromium > /dev/null
+          bash deploy/box/lang/fetch_voices.sh "$LANG_VOICES"
+      - name: Render and publish
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ai247-media
+        run: |
+          set -eu
+          ROOT=$RUNNER_TEMP/lang
+          # a different stretch of the rotation every run (deterministic from the clock)
+          python -m lang.producer_loop --root "$ROOT" --target "$LESSONS" --start $(( $(date +%s) / 600 )) --once
+          python -u -m lang.channel_worker --root "$ROOT" --prefix lang/ --max-wait 0 --max-blocks "$LESSONS"
+          ls "$ROOT/failed"
+      - name: Refresh the replay pool (lang/pool/manifest.json)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ai247-media
+        run: python -m newsbot.replay_pool --from-r2 --max-blocks 20 --min-segments 1 --key-prefix lang/ --write pool-manifest.json --upload --force

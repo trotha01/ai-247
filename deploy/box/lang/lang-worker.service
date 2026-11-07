@@ -1,0 +1,15 @@
+[Unit]
+Description=Language channel worker (render lessons, publish 1-lesson blocks to ai247-media lang/)
+After=network-online.target lang-producer.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=@REPO@
+EnvironmentFile=@HOME@/r2.env
+Environment=LANG_VOICES=@HOME@/voices
+ExecStart=@HOME@/venv/bin/python -u -m lang.channel_worker --root /hyperai/home/loop/lang --prefix lang/ --block 1 --max-wait 120
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

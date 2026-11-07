@@ -1,0 +1,12 @@
+[Unit]
+Description=Language channel producer (keeps lesson scripts queued ahead of the worker)
+After=network-online.target
+
+[Service]
+WorkingDirectory=@REPO@
+ExecStart=@HOME@/venv/bin/python -u -m lang.producer_loop --root /hyperai/home/loop/lang --target 12
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
