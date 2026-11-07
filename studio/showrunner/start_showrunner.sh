@@ -32,7 +32,7 @@ sleep 2
 # 1. tunnel
 rm -f $RUN/*.log
 touch $RUN/cloudflared.log $RUN/gate.log && chown gate:gate $RUN/cloudflared.log $RUN/gate.log
-touch $RUN/dsh.log && chown show:show $RUN/dsh.log && chmod 644 $RUN/dsh.log
+touch $RUN/dsh.log && chown show:gate $RUN/dsh.log && chmod 640 $RUN/dsh.log  # launch tokens: show writes, gate reads
 su gate -s /bin/bash -c "nohup $H/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3080 >> $RUN/cloudflared.log 2>&1 < /dev/null &"
 URL=""
 for i in $(seq 1 60); do

@@ -157,7 +157,9 @@ function proposalsJson() {
 }
 
 function review(req, res) {
-  const id = decodeURIComponent(req.url.slice("/__review/".length)).replace(/\.jpg$/, "");
+  let id;
+  try { id = decodeURIComponent(req.url.slice("/__review/".length)).replace(/\.jpg$/, ""); }
+  catch (e) { res.writeHead(404); return res.end("no preview"); }  // malformed escape: not a crash
   const f = `${PROPOSALS}/${id}/review.jpg`;
   if (!ID_RE.test(id) || !fs.existsSync(f)) { res.writeHead(404); return res.end("no preview"); }
   res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
@@ -174,8 +176,10 @@ function status(res) {
 
 function fixHeaders(h) {
   const o = { ...h };
-  delete o["x-frame-options"];
-  if (o["content-security-policy"]) o["content-security-policy"] = String(o["content-security-policy"]).replace(/frame-ancestors[^;]*;?/g, "");
+  // the studio page frames dsh from the same origin: allow exactly that, keep clickjacking protection otherwise
+  o["x-frame-options"] = "SAMEORIGIN";
+  const csp = String(o["content-security-policy"] || "").replace(/frame-ancestors[^;]*;?/g, "").trim();
+  o["content-security-policy"] = (csp ? csp.replace(/;?$/, "; ") : "") + "frame-ancestors 'self'";
   if (o.location && String(o.location).startsWith("/") && !String(o.location).startsWith("/dsh/")) o.location = "/dsh" + o.location;
   return o;
 }

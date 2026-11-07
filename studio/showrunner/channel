@@ -30,6 +30,7 @@ import io
 import json
 import os
 import pwd
+import re
 import shutil
 import struct
 import socket
@@ -57,8 +58,9 @@ ALLOWED = {
 sys.path.insert(0, "/hyperai/home/kids-test/blender")
 
 
-def sh(cmd):
-    return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip()
+def run(argv) -> str:
+    """Run a fixed argument list (never a shell: arguments from callers must not become shell code)."""
+    return subprocess.run(argv, capture_output=True, text=True).stdout.strip()
 
 
 def fetch(url) -> bytes:
@@ -70,7 +72,7 @@ def fetch(url) -> bytes:
 
 
 def running(pattern):
-    return bool(sh(f"pgrep -f {pattern}"))
+    return bool(run(["pgrep", "-f", pattern]))
 
 
 def lib():
@@ -100,8 +102,9 @@ def status(_):
           f"{len(list((ROOT / 'failed').glob('*.json')))}   recent failures in log: {len(fails)}")
     L = lib()
     print(f"image library: {len(L.ready('backdrop'))} backdrops, {len(L.ready('card'))} cards ready, {len(L.pending())} being made")
-    print("GPU:", sh("nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader"),
-          "  RAM:", sh("free -g | awk 'NR==2{print $3\"/\"$2\" GB used\"}'"))
+    mem = run(["free", "-g"]).splitlines()[1].split()
+    print("GPU:", run(["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader"]),
+          f"  RAM: {mem[2]}/{mem[1]} GB used")
     try:
         h = json.loads(fetch(STREAM + "/healthz"))
         print(f"stream: ok={h.get('ok')} source={h.get('source')} manifest age {h.get('manifest', {}).get('age_s')}s")
@@ -190,8 +193,9 @@ def notes(_):
 
 def unnote(args):
     lines = [l for l in (P / "notes.md").read_text().splitlines() if l.strip()]
-    i = int(args[0]) - 1
-    gone = lines.pop(i)
+    if not args or not args[0].isdigit() or not 1 <= int(args[0]) <= len(lines):
+        sys.exit(f"unnote N, with N from 1 to {len(lines)} (see channel notes)")
+    gone = lines.pop(int(args[0]) - 1)
     (P / "notes.md").write_text("".join(l + "\n" for l in lines))
     print("removed:", gone)
 
@@ -223,21 +227,26 @@ def order(args):
           else "not ordered: need kind backdrop|card, a name, a prompt, and --text for cards")
 
 
+LOGS = {"producer": ROOT / "producer.log", "worker": ROOT / "worker.log", "engineer": ROOT / "engineer.log"}
+
+
 def logs(args):
     which = args[0] if args else "worker"
-    n = int(args[1]) if len(args) > 1 else 20
-    print(sh(f"tail -n {n} {ROOT / (which + '.log')}"))
+    if which not in LOGS:
+        sys.exit("logs producer|worker|engineer [N]")
+    n = min(max(int(args[1]), 1), 200) if len(args) > 1 and args[1].isdigit() else 20
+    lines = LOGS[which].read_text(errors="replace").splitlines() if LOGS[which].exists() else []
+    print("\n".join(lines[-n:]))
 
 
 def restart(args):
-    which = args[0]
+    which = args[0] if args else ""
     if which not in ("producer", "worker"):
         sys.exit("restart producer|worker")
-    pat = {"producer": "producer_loop.py", "worker": "channel_worker.py"}[which]
-    sh(f"pkill -f {pat}")
+    run(["pkill", "-f", {"producer": "producer_loop.py", "worker": "channel_worker.py"}[which]])
     time.sleep(2)
-    extra = " --block 4 --renders 4" if which == "worker" else ""
-    print(sh(f"{LOOP}/run_{which}.sh{extra}"))
+    extra = ["--block", "4", "--renders", "4"] if which == "worker" else []
+    print(run([str(LOOP / f"run_{which}.sh"), *extra]))
 
 
 
@@ -246,8 +255,17 @@ def _slug(s, n=30):
     return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")[:n] or "x"
 
 
+ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z0-9_]{1,40}$")  # what propose() makes; nothing else is a request ID
+
+
 def _load(pid):
-    f = PROPOSALS / pid / "request.json"
+    """A request by ID. IDs come from callers, so they must match ID_RE and stay inside PROPOSALS."""
+    if not isinstance(pid, str) or not ID_RE.match(pid):
+        sys.exit(f"not a request ID: {pid!r}")
+    d = (PROPOSALS / pid).resolve()
+    if d.parent != PROPOSALS.resolve():
+        sys.exit(f"not a request ID: {pid!r}")
+    f = d / "request.json"
     if not f.exists():
         sys.exit(f"no proposal {pid}")
     return json.loads(f.read_text())
@@ -318,6 +336,8 @@ def actions(args):
 
 
 def submit(args):
+    if len(args) != 2:
+        sys.exit("submit ID FILE.py")
     pid, src = args[0], Path(args[1])
     eng_root = Path("/output/eng/work").resolve()
 
