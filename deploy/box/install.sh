@@ -31,7 +31,7 @@ CHROMIUM=""
 if command -v nix > /dev/null; then
   nix --extra-experimental-features 'nix-command flakes' build nixpkgs#ffmpeg-headless.bin --out-link "$ROOT/tools/ffmpeg"
   nix --extra-experimental-features 'nix-command flakes' build nixpkgs#chromium --out-link "$ROOT/tools/chromium"
-  TOOLPATH=$ROOT/tools/ffmpeg/bin; CHROMIUM=$ROOT/tools/chromium/bin/chromium
+  TOOLPATH=$(dirname "$(ls "$ROOT"/tools/ffmpeg*/bin/ffmpeg | head -1)"); CHROMIUM=$ROOT/tools/chromium/bin/chromium
 else
   command -v ffmpeg > /dev/null || sudo apt-get install -y -qq ffmpeg
   TOOLPATH=$(dirname "$(command -v ffmpeg)")
