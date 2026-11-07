@@ -52,6 +52,55 @@ def test_every_channel_yaml_is_valid():
     assert "lang" in names
 
 
+def test_channel_by_name_from_repo_root(monkeypatch):
+    monkeypatch.chdir(ROOT)  # the repo root holds a lang/ package: the name must still mean channels/lang.yaml
+    assert load_channel("lang")["_path"].endswith("channels/lang.yaml")
+    with pytest.raises(SystemExit):
+        load_channel("../etc")
+
+
+def test_timeout_kills_node(tmp_path):
+    ch = chan(tmp_path, item=[{"node": "slow", "cmd": ["sleep", "30"], "in": ["script.json"], "out": ["clip.mp4"], "timeout": 1}])
+    r = Runner(ch, tmp_path / "root", dry_run=True)
+    t = time.time()
+    res = r.run_step(ch["item"][0], tmp_path / "job", {})
+    assert res["status"] == "fail" and "timeout" in res["log"] and time.time() - t < 15
+
+
+def test_publish_real_branch_uses_prefix(tmp_path, monkeypatch):
+    """publish (not dry-run) writes under the channel prefix through newsbot.publish, manifest last."""
+    from spine.nodes import common
+    from newsbot import r2
+
+    class S3:
+        def __init__(self):
+            self.puts = []
+        def upload_file(self, f, b, k, ExtraArgs=None):
+            self.puts.append(k)
+        def put_object(self, Bucket, Key, **kw):
+            self.puts.append(Key)
+        def get_object(self, Bucket, Key, **kw):
+            raise KeyError(Key)
+    s3 = S3()
+    monkeypatch.setattr(r2, "r2_configured", lambda: True)
+    monkeypatch.setattr(r2, "client", lambda: s3)
+    monkeypatch.setattr(r2, "bucket", lambda: "b")
+    monkeypatch.delenv("SPINE_DRY_RUN", raising=False)
+    ep = tmp_path / "in" / "episode"
+    ep.mkdir(parents=True)
+    (ep / "seg_000.ts").write_bytes(b"x")
+    (ep / "manifest.json").write_text(json.dumps({"segments": [{"file": "seg_000.ts", "duration": 6.0, "bytes": 1}]}))
+    job = tmp_path / "job"
+    contract.write_node_yaml(job, {"name": "publish", "inputs": {"out": [str(tmp_path / "in")]},
+                                   "params": {"prefix": "lang/spine-test/"}, "channel": {"prefix": "lang/"}})
+    r = contract.call(common.publish, job)
+    assert r["status"] == "ok", r
+    assert all(k.startswith("lang/spine-test/") for k in s3.puts) and s3.puts[-1] == "lang/spine-test/manifest.json"
+    contract.write_node_yaml(job, {"name": "publish", "inputs": {"out": [str(tmp_path / "in")]},
+                                   "params": {"prefix": "puddle/"}, "channel": {"prefix": "lang/"}})
+    assert contract.call(common.publish, job)["status"] == "fail"
+
+
 def test_yaml_rejects_unknown_input_and_missing_publish(tmp_path):
     with pytest.raises(ValueError, match="no earlier node"):
         chan(tmp_path, item=[{"node": "r", "run": "m:f", "in": ["nope"]}])

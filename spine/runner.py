@@ -48,9 +48,9 @@ def log(*a):
 
 # ------------------------------------------------------------------ channel YAML --------------------------------
 def channel_path(ref: str) -> Path:
-    p = Path(ref)
-    if p.suffix in (".yaml", ".yml") or p.exists():
-        return p
+    """A name -> channels/<name>.yaml (never a folder such as the lang/ package); a .yaml/.yml path -> itself."""
+    if ref.endswith((".yaml", ".yml")):
+        return Path(ref)
     if not ref.replace("-", "").replace("_", "").isalnum():
         raise SystemExit(f"channel name must be letters/digits, not {ref!r}")
     return CHANNELS / f"{ref}.yaml"
@@ -79,6 +79,20 @@ def load_channel(ref: str) -> dict:
         raise ValueError(f"{path}: the last block node must be `publish`")
     ch["_path"] = str(path)
     return ch
+
+
+def kill_group(proc: subprocess.Popen) -> None:
+    """SIGTERM the node's whole process group, SIGKILL after 10 s."""
+    for sig, wait in ((signal.SIGTERM, 10), (signal.SIGKILL, 5)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=wait)
+            return
+        except subprocess.TimeoutExpired:
+            continue
 
 
 # ------------------------------------------------------------------ one step ------------------------------------
@@ -146,13 +160,19 @@ class Runner:
                 with open(job / "log.txt", "a", encoding="utf-8") as lf:
                     lf.write(f"--- {time.strftime('%Y-%m-%dT%H:%M:%S')} attempt {attempt + 1}/{tries}\n")
                     lf.flush()
-                    subprocess.run(self.command(node, job), cwd=REPO, env=env, stdout=lf, stderr=subprocess.STDOUT,
-                                   timeout=spec["timeout"], start_new_session=False)
+                    # own process group, so a timeout also kills what the node started (ffmpeg, piper, chromium)
+                    proc = subprocess.Popen(self.command(node, job), cwd=REPO, env=env, stdout=lf,
+                                            stderr=subprocess.STDOUT, start_new_session=True)
+                    try:
+                        proc.wait(timeout=spec["timeout"])
+                    except subprocess.TimeoutExpired:
+                        kill_group(proc)
+                        raise
                 res = read_result(job) or {"status": "fail", "outputs": {}, "log": "exited without result.json"}
             except subprocess.TimeoutExpired:
                 res = {"status": "fail", "outputs": {}, "log": f"timeout after {spec['timeout']} s"}
             secs = time.time() - t0
-            self.event(ev="step", node=node["node"], job=str(job.relative_to(self.root)), attempt=attempt + 1,
+            self.event(ev="step", node=node["node"], job=os.path.relpath(job, self.root), attempt=attempt + 1,
                        status=res["status"], seconds=round(secs, 1), cost_usd=res.get("cost_usd", 0), log=res.get("log", "")[:300])
             log(f"  {node['node']:<16} {res['status']:<4} {secs:6.1f}s  {res.get('log', '')[:140]}")
             if res["status"] != "fail" or attempt + 1 == tries or self.stopping():

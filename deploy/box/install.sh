@@ -71,6 +71,18 @@ sed "s|@ROOT@|$ROOT|g" "$CODE/deploy/box/channel@.service" > "$UD/channel@.servi
 if [ -n "${SPINE:-}" ]; then
   (cd "$CODE" && "$ROOT/venv/bin/python" -m spine check "$CH" > /dev/null)   # fail early on a bad channels/$CH.yaml
   UNITS+=("channel@$CH.service")
+  # the old per-channel loop must not publish to the same prefix: stop + disable it (unit files are kept for rollback),
+  # and carry the lesson counter over once
+  for f in "$CODE/deploy/box/$CH"/*.service; do
+    [ -e "$f" ] || continue; u=$(basename "$f")
+    if systemctl --user is-enabled -q "$u" 2>/dev/null || systemctl --user is-active -q "$u" 2>/dev/null; then
+      systemctl --user disable --now "$u" && log "stopped + disabled old unit $u (kept; rollback: systemctl --user enable --now $u)"
+    fi
+  done
+  if [ -f "$ROOT/$CH/run/producer/next_n" ] && [ ! -f "$ROOT/$CH/spine/state/pick_lesson/next_n" ]; then
+    mkdir -p "$ROOT/$CH/spine/state/pick_lesson" && cp "$ROOT/$CH/run/producer/next_n" "$ROOT/$CH/spine/state/pick_lesson/next_n"
+    log "lesson counter carried over: $(cat "$ROOT/$CH/spine/state/pick_lesson/next_n")"
+  fi
 else
   for f in "$CODE/deploy/box/$CH"/*.service; do
     sed "s|@ROOT@|$ROOT|g" "$f" > "$UD/$(basename "$f")"; UNITS+=("$(basename "$f")")

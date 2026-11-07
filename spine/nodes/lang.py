@@ -7,8 +7,9 @@ from spine.contract import Job
 
 
 def pick_lesson(job: Job):
-    """-> script.json: lang.lesson.lesson(n) with n kept in the node's state folder (next_n, same file the old
-    lang.producer_loop used, so a swap carries on the lesson sequence). params: start (first n when no state)."""
+    """-> script.json: lang.lesson.lesson(n) with n kept in ROOT/state/pick_lesson/next_n (same format as the old
+    lang.producer_loop's ROOT/producer/next_n: copy that file over when swapping, so the lesson sequence carries on).
+    params: start (first n when there is no state yet)."""
     from lang.lesson import lesson
     st = job.state / "next_n"
     n = int(st.read_text().strip() or 0) if st.exists() else int(job.params.get("start", 0))
