@@ -1,23 +1,17 @@
 # Handoff
 
 ## Objective
-AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, writer, Blender, TTS, backdrops, publish, Worker, player) at site/puddle-architecture.html, mapped from studio/ on branch studio-puddle-park (PR #39) plus newsbot/publish.py, newsbot/channel.py, worker/src, site/. Linked from the site footer, render-checked in CI. Branch `cloud/puddle-arch`.
+AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, writer, Blender, TTS, backdrops, publish, Worker, player) at site/puddle-architecture.html, mapped from studio/ plus newsbot/publish.py, newsbot/channel.py, worker/src, site/. Linked from the site footer and README, render-checked in CI. Branch `cloud/puddle-arch`.
 
 ## Done
-- Found a first version already on main (PR #48, c65ef0b, another session): inline SVG, info panel, footer link in site/index.html.
-- PR #39 is closed unmerged, so only site/, docs/ and the CI test hook change here.
-- Verified against the code: producer keeps inbox 8 deep (2 at once, polls 5 s); channel worker takes 4 scenes or a partial block after 180 s, voice.py then Blender as user render then ffmpeg 6 s HLS, publish_many, 8 GB cap, MOSS window every 600 s; engineer loop polls proposals every 20 s; channel approve copies action.py to actions/live/; start_showrunner.sh writes showrunner/url.txt (bucket root) for the showrunner-link Worker; aitv-live is worker/src with PREFIX=puddle/, WINDOW 5, MAX_MANIFEST_AGE_S 1800.
-
-- v2 page committed: separate lanes, Qwen llama-server and channel service nodes, Runs on / Triggered by per node, file links to GitHub; README link.
-- site/test/e2e-architecture.js (light 1100 px, dark 360 px; overlaps, panels, scroll, errors, named paths exist) passes locally; added to worker-site-e2e with screenshots as an artifact.
-- PR #52 opened, subscribed to its activity. First CI run green (tests, worker-site-e2e, claude-review: 0 blocking; replied to its 4 optional findings in one PR comment).
-- Merge conflict with main: Trevor's PR #51 trimmed operational details (password-gate mechanics, tunnel, ports, bucket/key names, run-as users) and PR #49 added tests/test_deploy_guard.py (no workflow line may mention studio). Merged main, kept v2's layout with #51's trims applied to all new text, dropped the CI fetch of the Puddle Park branch (those paths are checked locally only).
-
-- Reviews 2 and 3 (0 blocking): trimmed llama-server flags and restart details; answered the rest on the PR. CI green on 8f0ab9a, then the merge hit a conflict: main gained studio/ (PRs #40-#44, so PR #39's code is now on main). Merged main again: page links and the render check's path check now use main (all 43 paths exist; CI verifies them too).
+- v1 was already on main (PR #48, another session); Trevor's PR #51 trimmed operational details from it.
+- PR #52 (merged 926bde0, 09:04Z): v2 page. It has separate lanes, plus the shared Qwen llama-server and channel service nodes. Each node has Runs on and Triggered by, checked against the loops in studio/, and source links point to main. #51's trims also apply to the new text. It adds site/test/e2e-architecture.js (light 1100 px and dark 360 px: nodes, labelled edges, no overlaps, full panels, no horizontal scroll, no errors, footer link, named paths exist) in worker-site-e2e with screenshots, and a README link. Four claude-review rounds: 0 blocking findings. The llama flags and restart details were trimmed, and the rest was answered on the PR.
+- Live check (09:17Z, headless, 360 px): https://ai-247.pages.dev/puddle-architecture.html returns 200 with 15 nodes and 19 edges. Panels open, there is no horizontal scroll and no JS errors, and none of the trimmed strings appear. The ai-247 footer links it.
+- Follow-up on this branch: PR #54 renamed the Puddle Park Worker aitv-live to puddle-live while #52 was in review. The page now names puddle-live and links studio/cloudflare/puddle-live/wrangler.toml and .github/workflows/deploy-puddle.yml. The path check also covers .github/ (44 paths, all exist).
 
 ## Pending
-- PR #52 checks (tests, worker-site-e2e, claude-review), then squash-merge; confirm the page on https://ai-247.pages.dev/puddle-architecture.html after the Pages deploy.
-- jmacs todo-status done with the page URL (jmacs is not installed in cloud sessions; the orchestrator applies it from status.json).
+- Follow-up PR checks, then merge.
+- jmacs todo-status done with the page URL: jmacs is not installed in cloud sessions, so the orchestrator applies it from status.json.
 
 ## Next step
-Wait for PR #52 checks on the merge commit; fix anything red; squash-merge; check the live page; set status done.
+Merge the follow-up PR when green. Nothing else.
