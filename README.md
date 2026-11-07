@@ -17,6 +17,11 @@ A code-made, 24/7 AI news channel. Bulletins and graphics are rendered by code f
 7. Each episode researches one topic (`topics/topics.json`, editable; `docs/TOPICS.md`) from primary sources and
    skips topics and stories already in the episode history (Cloudflare D1, R2 mirror as fallback) unless there is new news.
 
+Puddle Park, a self-writing puppet channel (`studio/` on branch `studio-puddle-park`), reuses steps 2-4 under the R2
+prefix `puddle/`. Its node graph, with what runs where and what flows between the parts:
+[ai-247.pages.dev/puddle-architecture.html](https://ai-247.pages.dev/puddle-architecture.html)
+(source `site/puddle-architecture.html`, render check `site/test/e2e-architecture.js`).
+
 ## Plan
 
 Full plan: https://github.com/trotha01/knowledge-base-lab/blob/main/docs/ai-news-channel-plan.org

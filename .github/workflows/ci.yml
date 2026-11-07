@@ -88,3 +88,17 @@ jobs:
         run: node site/test/e2e-worker.js "$RUNNER_TEMP/tools/node_modules/hls.js/dist/hls.min.js"
         env:
           NODE_PATH: ${{ runner.temp }}/tools/node_modules
+      - name: Puddle Park architecture page renders (light 1100 px, dark 360 px)
+        # The studio-puddle-park branch is fetched so the studio/ paths named on the page are checked to exist too.
+        run: |
+          git fetch --depth=1 origin studio-puddle-park:refs/remotes/origin/studio-puddle-park || echo "studio-puddle-park not fetched; studio/ paths skipped"
+          node site/test/e2e-architecture.js "$RUNNER_TEMP/arch-shots"
+        env:
+          NODE_PATH: ${{ runner.temp }}/tools/node_modules
+      - name: Upload architecture screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: puddle-architecture-screenshots
+          path: ${{ runner.temp }}/arch-shots
+          if-no-files-found: ignore
