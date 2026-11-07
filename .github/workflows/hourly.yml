@@ -16,6 +16,13 @@ name: hourly-bulletins
 # without repository activity. Stop it without a commit: repo variable HOURLY_CRON_ENABLED = "false", or
 # `gh workflow disable hourly-bulletins -R trotha01/ai-247`. A cron run has no `inputs`, so the defaults below apply.
 #
+# Degrade gracefully (docs/PLAN.md "Scheduled run 1"): the run's verdict is whether something was published, not whether
+# every slice rendered. A render job that fails (install stall, a floor test, the 25-minute limit) is `continue-on-error`
+# and is reported as a ::warning:: by the stitch job, which publishes every bulletin that did render and fails only
+# when there is nothing to publish. Only hard checks reject a bulletin (grounding, citations, codec, seams); the
+# editorial floors are relaxed for the slices (NEWSBOT_MIN_STORIES 6, NEWSBOT_MIN_SOURCES 3) and the rundown is
+# interleaved by source (NEWSBOT_RUNDOWN_INTERLEAVE) so the stories that fit 10 minutes span the slice's sources.
+#
 # Cost (docs/PLAN.md has the measured numbers): only the first HOURLY_LLM_SLICES bulletins per run (repo variable,
 # default 1) use the Claude Haiku writer + fact check (~0.005 USD per bulletin, per-process cap NEWSBOT_MAX_RUN_USD
 # 0.05); the others take the extractive path (0 USD). 24 runs/day x 1 Haiku bulletin = ~0.12 USD/day, ~3.6 USD/month,
@@ -105,6 +112,9 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 50   # install up to 20 (slow apt mirrors when six jobs start at once) + render 25 + tests/artifact
+    # A lost slice is 10 minutes less footage, not a failed run: the stitch job publishes the rest and warns per slice.
+    # The failure stays visible in this job's log, step summary and the stitch annotations.
+    continue-on-error: true
     strategy:
       fail-fast: false   # one bad slice must not cancel the others: the stitch publishes whatever rendered
       matrix:
@@ -123,20 +133,26 @@ jobs:
         # faster-failing pip: when six render jobs start at once, apt alone took 3-5 min and pip then printed nothing for
         # 5 min on 4 of 12 jobs (runs 42252356577, 42255030016), so the 8-minute step never reached a second attempt.
         # pip now gives up on a stalled connection after 20 s (2 retries, 200 s cap); each stage prints its wall-clock.
-        # Worst case per attempt: apt 3 x 120 s + pip 200 s = 9.3 min, so 20 minutes always allows a second attempt.
+        # The ffmpeg install (about 100 MB of packages) hit the 120 s cap on all three attempts of slice 5 in the
+        # scheduled run 42298386727 (attempt 3: the small packages were done after 23 s, then ffmpeg timed out), so
+        # the apt installs now get 180 s and 240 s, the stage that failed is named, and a killed apt is repaired with
+        # `dpkg --configure -a` before the next attempt. Worst case per attempt: 120 + 180 + 240 + 200 s = 12.3 min,
+        # so 20 minutes always allows a normal second attempt (installs take 35-75 s when the mirror is healthy).
         timeout-minutes: 20
         run: |
           start=$SECONDS
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
-            t0=$SECONDS
+            t0=$SECONDS; stage=apt-update
             if timeout 120 $APT update -qq \
-               && timeout 120 $APT install -y -qq $INSTALL_PKGS \
-               && { command -v ffmpeg >/dev/null || timeout 120 $APT install -y -qq ffmpeg; } \
-               && { echo "apt: $((SECONDS-t0)) s"; t1=$SECONDS; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt && echo "pip: $((SECONDS-t1)) s"; }; then
+               && { stage=apt-install; timeout 180 $APT install -y -qq $INSTALL_PKGS; } \
+               && { stage=apt-ffmpeg; command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg; } \
+               && { echo "apt: $((SECONDS-t0)) s"; stage=pip; t1=$SECONDS; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt && echo "pip: $((SECONDS-t1)) s"; }; then
               echo "install stage: $((SECONDS-start)) s (attempt $attempt)"; exit 0
             fi
-            echo "install attempt $attempt failed after $((SECONDS-t0)) s; retrying in 10 s"; sleep 10
+            echo "install attempt $attempt failed in stage $stage after $((SECONDS-t0)) s; retrying in 10 s"
+            timeout 60 sudo dpkg --configure -a || true   # a killed apt can leave dpkg half-configured
+            sleep 10
           done
           echo "install failed after 3 attempts"; exit 1
       - uses: actions/cache@v6
@@ -155,6 +171,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ matrix.slice < fromJSON(env.LLM_SLICES) && secrets.ANTHROPIC_API_KEY || '' }}
           NEWSBOT_NO_LLM: ${{ matrix.slice >= fromJSON(env.LLM_SLICES) && '1' || '' }}
           NEWSBOT_PER_SOURCE_CAP: "4"     # the planner already mixed sources per slice (<= 4 each)
+          NEWSBOT_RUNDOWN_INTERLEAVE: "1" # round-robin the rundown by source so the 8-9 stories that fit span the slice's sources
           NEWSBOT_TOPIC_MODE: "off"       # the topic research stage (PR #29) is not run per slice; it has its own budget
           NEWSBOT_MAX_RUN_USD: "0.05"     # Haiku-only slice: keep the original per-process cap (the code default is 0.75 for topic episodes)
         run: |
@@ -167,13 +184,15 @@ jobs:
       - name: Tests (acceptance + seam on the real render)
         # NEWSBOT_MIN_STORIES 6: slices carry long source texts (arXiv abstracts, release notes), so 8-9 stories fill
         # 600 s; run 42252356577 lost 3 of 6 full-length, 100%-grounded bulletins to the Day 1 floor of 10.
-        # NEWSBOT_MIN_SOURCES 3: the time budget cuts single-item sources first, so a slice dealt from 6-7 sources airs
-        # 8-9 stories from 3-5 of them; the first scheduled run (42298386727) lost slices 0 and 2 (9 stories, 3 sources
-        # each, 100% grounded) to the Day 1 floor of 4 although the run as a whole covered 11 sources.
+        # NEWSBOT_MIN_SOURCES 3 (PR #36): the first scheduled run (42298386727) lost slices 0 and 2 (9 stories, 3 sources
+        # each, 100% grounded) to the Day 1 floor of 4. With NEWSBOT_RUNDOWN_INTERLEAVE the stories that fit span every
+        # source the slice has (5-7), so 3 is a safety net for a short supply, not the expected spread.
         run: NEWSBOT_DAY1_OUT=out1 NEWSBOT_MIN_STORIES=6 NEWSBOT_MIN_SOURCES=3 python -m pytest -q tests/test_day1_output.py tests/test_seam.py
       - name: Job summary
         if: always()
-        run: python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
+        run: |
+          if [ -f out1/report.json ]; then python -m newsbot.summary1 out1 >> "$GITHUB_STEP_SUMMARY" || true
+          else echo "slice ${{ matrix.slice }}: no report.json (the render did not run or did not finish)" >> "$GITHUB_STEP_SUMMARY"; fi
       - uses: actions/upload-artifact@v7
         with:
           name: bulletin-${{ matrix.slice }}
@@ -206,6 +225,10 @@ jobs:
           # one directory per rendered bulletin, in slice order; a bulletin whose render failed has no directory
           dirs=$(ls -d bulletins/bulletin-* 2>/dev/null | sort -t- -k2 -n | tr '\n' ' ')
           echo "rendered: $dirs"
+          # every planned slice without a bulletin artifact is a lost 10 minutes: say which, as a run annotation
+          for s in $(python -c "import json;print(' '.join(map(str, json.load(open('plan/slices.json')))))"); do
+            [ -d "bulletins/bulletin-$s" ] || echo "::warning::slice $s rendered no bulletin (see the render ($s) job log): 10 min less footage this run"
+          done
           [ -n "$dirs" ] || { echo "::error::no bulletin rendered: nothing to publish"; exit 1; }
           echo "DIRS=$dirs" >> "$GITHUB_ENV"
       - name: Publish to R2 (every segment first, root manifest.json last; skipped without the R2 secrets)

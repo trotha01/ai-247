@@ -22,20 +22,23 @@ jobs:
       - name: Install
         # Same stall guard as day1/hourly: this step hung >10 min on run 42208590694 (no output inside pip install -q)
         # and timed out at 8 min on 2026-11-06 (runs 42244948815, 42255636564: slow apt mirror, then pip silent).
-        # Each stage is bounded (apt 120 s x 3, pip 200 s with a 20 s socket timeout: 9.3 min worst case per attempt),
-        # so 20 minutes always allows a second attempt.
+        # Each stage is bounded (apt 120 + 180 + 240 s, pip 200 s with a 20 s socket timeout: 12.3 min worst case per
+        # attempt, same bounds as hourly.yml after the ffmpeg install hit 120 s three times on run 42298386727),
+        # so 20 minutes always allows a normal second attempt.
         timeout-minutes: 20
         run: |
           APT="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30"
           for attempt in 1 2 3; do
-            t0=$SECONDS
+            t0=$SECONDS; stage=apt-update
             if timeout 120 $APT update -qq \
-               && timeout 120 $APT install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng \
-               && { command -v ffmpeg >/dev/null || timeout 120 $APT install -y -qq ffmpeg; } \
-               && timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt; then
+               && { stage=apt-install; timeout 180 $APT install -y -qq libegl1 libgl1 libgles2 libfontconfig1 fonts-dejavu-core espeak-ng; } \
+               && { stage=apt-ffmpeg; command -v ffmpeg >/dev/null || timeout 240 $APT install -y -qq ffmpeg; } \
+               && { stage=pip; timeout 200 pip install --timeout 20 --retries 2 -r requirements.txt; }; then
               echo "install ok (attempt $attempt, $((SECONDS-t0)) s)"; exit 0
             fi
-            echo "install attempt $attempt failed after $((SECONDS-t0)) s; retrying in 10 s"; sleep 10
+            echo "install attempt $attempt failed in stage $stage after $((SECONDS-t0)) s; retrying in 10 s"
+            timeout 60 sudo dpkg --configure -a || true
+            sleep 10
           done
           echo "install failed after 3 attempts"; exit 1
       - name: Tests (no ANTHROPIC_API_KEY in this job)

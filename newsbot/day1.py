@@ -107,6 +107,10 @@ def main(argv=None) -> int:
             ranked = rank.rank(fresh, N_RUNDOWN, now)
             if len(ranked) < 6:
                 ranked = rank.rank(items, N_RUNDOWN, now)
+            if os.environ.get("NEWSBOT_RUNDOWN_INTERLEAVE") == "1":
+                # hourly slices (per-source cap 4): round-robin by source so the stories that fit the 10 minutes
+                # (the first 8-9) come from as many sources as the slice has, not 4 + 4 + 1 (run 42298386727)
+                ranked = rank.interleave_sources(ranked)
         (ep / "rank.json").write_text(json.dumps(rank.explain(ranked, now), indent=1))
         print(f"rundown: {len(ranked)} stories from {len({i.source for i in ranked})} sources; topic: {tr['info'].get('topic')}")
         # topic mode may air 5 stories (min_items); the general rundown needs 6. After the fallback above tr["ranked"] is None.
