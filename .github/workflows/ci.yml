@@ -88,3 +88,15 @@ jobs:
         run: node site/test/e2e-worker.js "$RUNNER_TEMP/tools/node_modules/hls.js/dist/hls.min.js"
         env:
           NODE_PATH: ${{ runner.temp }}/tools/node_modules
+      - name: Puddle Park architecture page renders (light 1100 px, dark 360 px)
+        # Also checks that every repo path the page names exists in this checkout (read only, nothing is run).
+        run: node site/test/e2e-architecture.js "$RUNNER_TEMP/arch-shots"
+        env:
+          NODE_PATH: ${{ runner.temp }}/tools/node_modules
+      - name: Upload architecture screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: puddle-architecture-screenshots
+          path: ${{ runner.temp }}/arch-shots
+          if-no-files-found: ignore

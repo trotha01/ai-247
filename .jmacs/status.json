@@ -1,1 +1,1 @@
-{"state":"running","msg":"report written (reports/channel-pipeline-survey.org); PR to main open, waiting for checks"}
+{"state": "running", "msg": "PR #52: green, then main gained studio/ (PRs #40-#44); merged main, links + path checks now against main; CI re-running before merge"}

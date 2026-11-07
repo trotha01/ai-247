@@ -1,17 +1,23 @@
 # Handoff
 
 ## Objective
-Research report reports/channel-pipeline-survey.org: shared swappable-node architecture for AI-247, Puddle Park and a new Latin/Koine Greek/Biblical Hebrew channel; survey open-source orchestration, playout, real-time agent frameworks, agent harnesses and open Bible-language datasets. Branch cloud/channel-survey; PR to main, merge when checks pass.
+AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, writer, Blender, TTS, backdrops, publish, Worker, player) at site/puddle-architecture.html, mapped from studio/ on branch studio-puddle-park (PR #39) plus newsbot/publish.py, newsbot/channel.py, worker/src, site/. Linked from the site footer, render-checked in CI. Branch `cloud/puddle-arch`.
 
 ## Done
-- Read docs/PLAN.md, docs/TOPICS.md, docs/R2_LAYOUT.md, site/puddle-architecture.html, studio/ on studio-puddle-park.
-- Surveyed (A)-(E) from GitHub/PyPI/npm primary sources (2026-11-07); unreachable hosts and 2nd-hand facts flagged in the report.
-- Wrote reports/channel-pipeline-survey.org: Verdict, comparison tables, node contract sketch (job folder, node.yaml, result.json, channel.yaml), AI-247/Puddle Park/language-channel mapping, migration order, Experts and sources.
-- Verdict: own file contract + DBOS Transact (Huey fallback) on the GPU box, Actions for cloud steps, ComfyUI as an image node, keep R2+Worker playout, dsh pinned (opencode fallback), Claude Agent SDK for Claude-only nodes; language data MACULA/SBLGNT, OSHB/MACULA Hebrew, Clementine Vulgate + Whitaker's; Piper phoneme voices via own IPA rules; Hebrew cards in headless Chromium.
+- Found a first version already on main (PR #48, c65ef0b, another session): inline SVG, info panel, footer link in site/index.html.
+- PR #39 is closed unmerged, so only site/, docs/ and the CI test hook change here.
+- Verified against the code: producer keeps inbox 8 deep (2 at once, polls 5 s); channel worker takes 4 scenes or a partial block after 180 s, voice.py then Blender as user render then ffmpeg 6 s HLS, publish_many, 8 GB cap, MOSS window every 600 s; engineer loop polls proposals every 20 s; channel approve copies action.py to actions/live/; start_showrunner.sh writes showrunner/url.txt (bucket root) for the showrunner-link Worker; aitv-live is worker/src with PREFIX=puddle/, WINDOW 5, MAX_MANIFEST_AGE_S 1800.
+
+- v2 page committed: separate lanes, Qwen llama-server and channel service nodes, Runs on / Triggered by per node, file links to GitHub; README link.
+- site/test/e2e-architecture.js (light 1100 px, dark 360 px; overlaps, panels, scroll, errors, named paths exist) passes locally; added to worker-site-e2e with screenshots as an artifact.
+- PR #52 opened, subscribed to its activity. First CI run green (tests, worker-site-e2e, claude-review: 0 blocking; replied to its 4 optional findings in one PR comment).
+- Merge conflict with main: Trevor's PR #51 trimmed operational details (password-gate mechanics, tunnel, ports, bucket/key names, run-as users) and PR #49 added tests/test_deploy_guard.py (no workflow line may mention studio). Merged main, kept v2's layout with #51's trims applied to all new text, dropped the CI fetch of the Puddle Park branch (those paths are checked locally only).
+
+- Reviews 2 and 3 (0 blocking): trimmed llama-server flags and restart details; answered the rest on the PR. CI green on 8f0ab9a, then the merge hit a conflict: main gained studio/ (PRs #40-#44, so PR #39's code is now on main). Merged main again: page links and the render check's path check now use main (all 43 paths exist; CI verifies them too).
 
 ## Pending
-- PR to main, checks, merge.
-- jmacs todo-status done: jmacs is not installed in the cloud session; orchestrator to mark the todo done with path reports/channel-pipeline-survey.org.
+- PR #52 checks (tests, worker-site-e2e, claude-review), then squash-merge; confirm the page on https://ai-247.pages.dev/puddle-architecture.html after the Pages deploy.
+- jmacs todo-status done with the page URL (jmacs is not installed in cloud sessions; the orchestrator applies it from status.json).
 
 ## Next step
-Merge the PR once checks pass.
+Wait for PR #52 checks on the merge commit; fix anything red; squash-merge; check the live page; set status done.
