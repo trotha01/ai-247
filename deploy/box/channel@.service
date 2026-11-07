@@ -1,0 +1,19 @@
+# systemd USER unit template for any channel (deploy/box/install.sh replaces @ROOT@):
+#   systemctl --user enable --now channel@lang     # runs channels/lang.yaml with the spine runner
+# Secrets/env per channel: @ROOT@/<name>/env and @ROOT@/<name>/r2.env (mode 600). State: @ROOT@/<name>/spine/.
+# The YAML is read at start: edit channels/<name>.yaml (or the checkout) and `systemctl --user restart channel@<name>`.
+[Unit]
+Description=Channel %i (spine runner, channels/%i.yaml)
+
+[Service]
+WorkingDirectory=@ROOT@/src/ai-247
+EnvironmentFile=-@ROOT@/%i/env
+EnvironmentFile=-@ROOT@/%i/r2.env
+ExecStart=@ROOT@/venv/bin/python -u -m spine run %i --root @ROOT@/%i/spine
+Restart=always
+RestartSec=10
+Nice=10
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

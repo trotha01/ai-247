@@ -1,0 +1,29 @@
+# Language channel (Lingua): Latin / Greek / Hebrew verse lessons. Run: python -m spine run lang --root ROOT
+# (deploy/box/channel@.service). Nodes: spine/nodes/*.py wrap lang/ (no rewrite). Contract: docs/NODE-CONTRACT.md.
+channel: lang
+host: griffith            # informational; nothing in code or YAML depends on the host
+prefix: lang/             # R2 bucket ai247-media, under lang/
+worker: lang-live         # Cloudflare Worker that plays it
+healthz: https://lang-live.trotha01.workers.dev/healthz
+cadence:
+  queue_ahead: 12         # lesson scripts waiting ahead of the worker (old lang-producer --target 12)
+  block_items: 1          # lessons per published block (~45-60 s each)
+  max_wait: 120           # publish a partial block once the oldest item waited this long
+  produce_every: 0
+storage:
+  local_cap_gb: 3
+producer:
+  - {node: pick_lesson, run: "spine.nodes.lang:pick_lesson", out: [script.json]}
+item:
+  - node: render_lesson
+    run: "spine.nodes.lang:render_lesson"
+    in: [script.json]
+    out: [clip.mp4]
+    timeout: 600
+    retries: 1
+    params:
+      voices: {en: en_US-ljspeech-medium}   # narrator; swap by editing this line + restart
+block:
+  - {node: segment_hls, run: "spine.nodes.common:segment_hls", in: [clip.mp4], out: [out], timeout: 600}
+  - {node: publish, run: "spine.nodes.common:publish", in: [out], timeout: 900, retries: 2,
+     params: {max_replays: 30, cap_gb: 6}}
