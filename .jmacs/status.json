@@ -1,1 +1,1 @@
-{"state":"running","msg":"Puddle Park architecture page: v1 already on main (PR #48); fixing lane overlap, adding Qwen + channel-service nodes, triggers, and a CI render test"}
+{"state": "running", "msg": "PR #52 open (architecture v2 + CI render check); waiting on tests, worker-site-e2e, claude-review"}
