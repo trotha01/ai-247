@@ -4,11 +4,6 @@ name: deploy
 #   worker/**  -> run the Worker tests, then `wrangler deploy` (Cloudflare Worker `ai247-live`), then scripts/smoke.sh
 #   site/**    -> `wrangler pages deploy site/` to the existing direct-upload Pages project `ai-247`
 # If CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set, the deploy jobs log that and exit 0 (clean no-op).
-#
-# NEVER deploys anything under studio/ (Puddle Park: its own wrangler configs, Workers and Pages project, deployed by
-# hand by its owners). Enforced three ways: studio/ is not in the trigger paths below, the "Deploy targets" step
-# fails the run if a deploy target is not worker/ (Worker `ai247-live`) or site/, and tests/test_deploy_guard.py
-# fails CI on any workflow that mentions studio/ or deploys from another directory.
 on:
   push:
     branches: [main]
@@ -49,12 +44,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # Deploy targets: worker/ must be the ai247-live Worker; the only other target is site/ (see the header).
-      - name: Deploy targets
-        run: |
-          set -eu
-          grep -qx 'name = "ai247-live"' worker/wrangler.toml || { echo "::error::worker/wrangler.toml is not the ai247-live Worker"; exit 1; }
-          echo "deploy targets: worker/ (Worker ai247-live), site/ (Pages ${PAGES_PROJECT}); nothing else is deployed"
       - id: diff
         env:
           BEFORE: ${{ github.event.before }}

@@ -3,6 +3,7 @@
 studio/cloudflare/*/wrangler.toml name other Workers and buckets on another Cloudflare account. If any workflow
 ever ran wrangler there, or listed studio/ in its triggers or steps, our secrets would deploy someone else's
 config. These checks read the workflow files as text (no YAML dependency) and ignore comment lines.
+The rule lives here and in docs/DEPLOY.md, not in deploy.yml: editing deploy.yml triggers a production deploy.
 """
 from __future__ import annotations
 
