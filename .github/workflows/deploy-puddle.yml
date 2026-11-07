@@ -1,14 +1,14 @@
 name: deploy-puddle
 
 # Puddle Park's Cloudflare Workers, on this repository's Cloudflare account (the existing CLOUDFLARE_API_TOKEN):
-#   studio/cloudflare/puddle-live/       -> Worker `puddle-live` (this repo's worker/src, PREFIX=puddle/, bucket aitv-media)
+#   studio/cloudflare/puddle-live/       -> Worker `puddle-live` (this repo's worker/src, PREFIX=puddle/, bucket ai247-media)
 #   studio/cloudflare/showrunner-link/   -> Worker `puddle-showrunner` (fixed link to the showrunner tunnel)
 # This is the ONLY way those Workers are deployed: the Puddle Park box holds an R2 key and no Workers/Pages rights.
 #
 # Off by default. A run deploys only when ALL hold: the repository variable PUDDLE_DEPLOY_ENABLED is `true` (unset or
 # anything else = log and stop, so merging changes here deploys nothing until Trevor turns it on), the ref is main,
 # and the push touched studio/cloudflare/ (or it is a manual run). tests/test_deploy_guard.py checks these gates and
-# that the configs stay on aitv-media under puddle/.
+# that the configs stay on ai247-media under puddle/.
 on:
   push:
     branches: [main]
@@ -52,8 +52,8 @@ jobs:
         run: |
           set -eu
           L=studio/cloudflare/puddle-live/wrangler.toml; S=studio/cloudflare/showrunner-link/wrangler.toml
-          grep -qx 'name = "puddle-live"' $L && grep -qx 'bucket_name = "aitv-media"' $L && grep -qx 'PREFIX = "puddle/"' $L
-          grep -qx 'name = "puddle-showrunner"' $S && grep -qx 'bucket_name = "aitv-media"' $S
+          grep -qx 'name = "puddle-live"' $L && grep -qx 'bucket_name = "ai247-media"' $L && grep -qx 'PREFIX = "puddle/"' $L
+          grep -qx 'name = "puddle-showrunner"' $S && grep -qx 'bucket_name = "ai247-media"' $S
           grep -q '"puddle/showrunner/url.txt"' studio/cloudflare/showrunner-link/src/index.js
           echo "config ok"
       - name: Deploy puddle-live

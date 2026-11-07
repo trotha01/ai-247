@@ -53,7 +53,7 @@ def test_puddle_configs_stay_in_the_shared_bucket_under_puddle():
     live = (ROOT / "studio/cloudflare/puddle-live/wrangler.toml").read_text().splitlines()
     link = (ROOT / "studio/cloudflare/showrunner-link/wrangler.toml").read_text().splitlines()
     assert 'name = "puddle-live"' in live and 'name = "puddle-showrunner"' in link  # never ai247-live or aitv-live
-    assert 'bucket_name = "aitv-media"' in live and 'bucket_name = "aitv-media"' in link
+    assert 'bucket_name = "ai247-media"' in live and 'bucket_name = "ai247-media"' in link
     assert 'PREFIX = "puddle/"' in live
     keys = re.findall(r'BUCKET\.(?:get|put|head|delete)\("([^"]+)"', (ROOT / "studio/cloudflare/showrunner-link/src/index.js").read_text())
     assert keys and all(k.startswith("puddle/") for k in keys), keys

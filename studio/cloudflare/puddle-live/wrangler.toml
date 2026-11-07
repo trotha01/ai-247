@@ -1,6 +1,6 @@
 # Puddle Park stream: this repo's Worker code (worker/src), unchanged, deployed with the puddle/ prefix as its own
 # Worker on Trevor's Cloudflare account. Deployed ONLY by .github/workflows/deploy-puddle.yml (gated; see that file).
-# Shared bucket: every channel has its own prefix in aitv-media (ai-247: bulletins/ and pool/ at the root; Puddle Park:
+# Shared bucket: every channel has its own prefix in ai247-media (ai-247: bulletins/ and pool/ at the root; Puddle Park:
 # puddle/). tests/test_deploy_guard.py fails CI if PREFIX stops being under puddle/.
 name = "puddle-live"
 main = "../../../worker/src/index.js"
@@ -8,7 +8,7 @@ compatibility_date = "2025-01-01"
 
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "aitv-media"
+bucket_name = "ai247-media"
 
 [vars]
 # Each channel lives under its own prefix in the bucket: puddle/manifest.json, puddle/<blocks>/seg_NNN.ts, puddle/pool/...

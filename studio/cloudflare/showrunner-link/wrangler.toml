@@ -7,4 +7,4 @@ workers_dev = true
 
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "aitv-media"
+bucket_name = "ai247-media"
