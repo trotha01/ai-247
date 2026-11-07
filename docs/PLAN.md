@@ -250,7 +250,12 @@ Trevor's rule holds on the run with the fixes: **60 min of new footage per hourl
 
 Cron: the `hourly-bulletins` file reached `main` at 15:47Z; the 16:23Z slot produced no run. The first `schedule` run was 42298386727 at 21:38Z (see "Schedule trigger" below); the stale-manifest failover (4 h) and the replay loop inside each manifest cover a missed hour without going dark.
 
-## Schedule trigger: proven on the first scheduled run (2026-11-06, run 42298386727)
+## Schedule trigger: proven (cron run 42327176145 green end to end, 2026-11-07 02:02Z)
+
+**Cron proven green: `hourly-bulletins` run 42327176145, `event=schedule`, created 02:02:23Z (the 01:23Z slot, 39 min late) on `main` 2e7c883 (PRs #36 and #37 in), conclusion `success` at 02:15:48Z (13.5 min).** Plan 18 s; all six render slices green (6 min 24 s to 11 min 39 s each); stitch published 6 bulletins, `bulletins/20261107T020233Z-00..05/`, 613 objects / 191.0 MB in 55.6 s, root `manifest.json` last (`cycle_start_k` 169624, `cycle_start_dseq` 107, `loop_from` 6, 60.0 min of new footage). Verified from the cloud session at 02:16Z: `/healthz` `source=live-manifest`, `manifest.uploaded` 2026-11-07T02:15:40.635Z, 1205 segments / 13 blocks; `/live.m3u8` media-sequence 169630, discontinuity-sequence 108, serving `seg/bulletins/20261107T020233Z-00/seg_006.ts` onwards; plain https://ai-247.pages.dev/ in headless Chromium: state `live`, currentTime 24.8 -> 36.8 s over 12 s, no errors, fetching `20261107T020233Z-00/seg_008..009.ts`. The pipeline therefore runs unattended on the GitHub schedule, end to end. GitHub's scheduler remains the weak link (2 events for 11 slots, both late: 15 and 39 min); the fallback below is still worth Trevor's decision.
+
+### First scheduled run (2026-11-06, run 42298386727)
+
 
 **First `schedule` event for this repository: `hourly-bulletins` run 42298386727, created 21:38:28Z for the 21:23Z slot (15 min late), on `main` 70b4c1b.** Its Trigger step logged `event=schedule ref=main` and `HOURLY_CRON_ENABLED=<unset>`, so the job-level gate passed. Unattended, the run planned 6 slices (200 feed items, 142 candidates, 45 never aired), rendered 3 of them and the `stitch` job published them: `bulletins/20261106T213836Z-00..02/`, 310 objects / 98.4 MB, root `manifest.json` last at 21:53:28Z (`cycle_start_k` 167006, `cycle_start_dseq` 76, `loop_from` 3, 3 fresh blocks). `/healthz` at 00:59Z next day: `source=live-manifest`, `manifest.uploaded` 2026-11-06T21:53:28.887Z, 905 segments / 10 blocks, pool ok. So the cron fires for this repository and a cron run publishes a new manifest to R2 that the Worker serves.
 
