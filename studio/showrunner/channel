@@ -44,7 +44,8 @@ from pathlib import Path
 ROOT = Path("/hyperai/home/loop/puddle")
 LOOP = Path("/hyperai/home/loop")
 P = ROOT / "producer"
-STREAM = "https://aitv-live.mychalsimka.workers.dev"
+# the puddle-live Worker (base URL, no path); override with PUDDLE_STREAM_URL (the playlist URL, as gate.js takes it)
+STREAM = os.environ.get("PUDDLE_STREAM_URL", "https://puddle-live.trotha01.workers.dev/live.m3u8").rsplit("/live.m3u8", 1)[0]
 SOCK = "/hyperai/home/loop/channel.sock"
 PROPOSALS = ROOT / "proposals"
 ACTIONS_LIVE = ROOT / "actions" / "live"
