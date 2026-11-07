@@ -1,0 +1,355 @@
+#+TITLE: Channel pipeline survey: one swappable-node architecture for AI-247, Puddle Park and a Bible-languages channel
+#+DATE: 2026-11-07
+#+OPTIONS: toc:nil ^:nil
+
+Research only; no code changed. Inputs read first: =docs/PLAN.md=, =docs/TOPICS.md=, =docs/R2_LAYOUT.md=,
+=site/puddle-architecture.html=, and =studio/= on branch =studio-puddle-park= (README, =pipeline/channel_worker.py=,
+=pipeline/producer_loop.py=, =pipeline/backdrops.py=, =box/install_dsh.sh=, =docs/BENCHMARK.md=). External facts come
+from GitHub repo, release and licence pages and the PyPI/npm registries, read on 2026-11-07. Star counts are a weak
+signal and approximate (the GitHub API was blocked from this session). Facts marked (2nd-hand) come from search
+snippets because the primary host was unreachable; (memory) means not re-checked against a primary source.
+
+* Verdict
+
+Pipeline base (why in brief):
+- Build on our own *file contract* (job folder + =node.yaml= + =result.json=, channel = YAML graph), not a platform;
+  both channels already hand off JSON files this way, so the contract outlives any orchestrator choice.
+- Run it on the GPU box with *DBOS Transact* (MIT library, SQLite, no server): durable steps plus a =gpu= queue
+  with a concurrency limit, which is exactly the one-card bottleneck. Huey (MIT, SQLite) is the fallback.
+- Cloud steps stay *GitHub Actions* jobs exchanging job folders via R2; move to Prefect or Hatchet only for a UI or
+  several boxes. Temporal and Airflow are too heavy, Arq is maintenance-only, n8n and Windmill have licence limits.
+- *ComfyUI* is an =image= node behind its =/prompt= API, not the orchestrator (single box, no cloud steps, weak retries).
+- *Playout stays R2 + Worker* (scales to zero); borrow ffplayout's schedule and filler model and Liquidsoap's fallback chain as ideas.
+- *Agentic nodes:* dsh pinned on llama-server via its OpenAI-compatible route, opencode as fallback, the Claude
+  Agent SDK only for nodes pinned to Claude. Pipecat later, only for a live tutor segment.
+
+Language channel stack:
+- *Text and morphology:* MACULA Greek (SBLGNT, CC BY 4.0); OSHB + MACULA Hebrew (WLC public domain, CC BY 4.0);
+  Clementine Vulgate (PD) with Whitaker's Words. Glosses: Berean/Dodson (PD), OSHB lexicon and STEPBible (CC BY).
+- *Excluded:* non-commercial sources (BHSA, PROIEL, MMS-TTS, XTTS), Nova Vulgata, and SBL Hebrew if monetized.
+- *Audio:* own text-to-IPA rules per pronunciation fed as phonemes to Piper it_IT / el_GR / a community he voice;
+  espeak-ng as IPA source and fallback.
+- *On-screen text:* HTML/CSS cards in headless Chromium with Noto Serif Hebrew (full niqqud and te'amim), then ffmpeg.
+
+* Comparison tables
+
+** (A) Orchestration with swappable steps
+
+| Project              | License                         | Latest release (date)       | Stars | Footprint                         | 1-GPU serial lane               | Fit                                                    |
+|----------------------+---------------------------------+-----------------------------+-------+-----------------------------------+---------------------------------+--------------------------------------------------------|
+| DBOS Transact (Py)   | MIT                             | 3.4.0 (2026-10-28)          | ~1.7k | library; SQLite default, Postgres | queues with concurrency limits  | *recommended runner*: durable steps, no server        |
+| Huey                 | MIT                             | 3.5.4 (2026-11-01)          | ~6.1k | 1 consumer; SQLite/file/Redis     | one worker; locks, timeouts     | *alternative*: simplest durable queue                 |
+| Prefect              | Apache-2.0                      | 3.9.2 (2026-11-06)          | ~24k  | server; SQLite or Postgres        | global concurrency limits       | step-up option with UI; flows run in Actions          |
+| Hatchet              | MIT                             | v0.119.2 (2026-11-06)       | ~8.2k | server + Postgres                 | worker slots, concurrency rules | step-up for many boxes                                 |
+| Dagster              | Apache-2.0                      | 1.13.29 (2026-11-05)        | ~16k  | webserver + daemon                | run queue tags (memory)         | asset model is a good fit for data, heavy for media   |
+| Temporal             | MIT                             | v1.32.2 (2026-11-02)        | ~24k  | server cluster + DB               | task queue (memory)             | too heavy for one box                                  |
+| Celery / RQ          | BSD-3 / BSD-2                   | 5.7.0 / 3.0.0 (Oct-Nov 2026) | 29k/11k | Redis or RabbitMQ               | =--concurrency=1= (memory)      | queues only, no DAG or durability                      |
+| Arq                  | MIT                             | 0.28.0 (2026-04-16)         | ~3k   | Redis                             | =max_jobs=1=                    | *avoid*: README says maintenance-only                 |
+| Procrastinate        | MIT                             | 3.10.0 (2026-09-23)         | ~1.4k | Postgres only                     | task locks                      | fine if Postgres exists; it does not today             |
+| Airflow / Kestra     | Apache-2.0                      | 3.4.0 / v2.0.9 (Nov 2026)   | 47k/30k | scheduler + DB / JVM + DB       | pools / limits                  | overkill                                               |
+| Windmill             | AGPL-3.0 core + proprietary EE  | v1.864.1 (2026-11-06)       | ~18k  | server + Postgres                 | worker groups                   | platform, licence limits managed hosting               |
+| n8n                  | Sustainable Use (not OSI)       | 2.46.6 (2026-11-04)         | ~210k | Node server                       | weak                            | SaaS glue, not media DAGs; licence limits resale     |
+| Luigi                | Apache-2.0                      | 3.8.1 (2026-05-07)          | ~19k  | optional scheduler                | resources                       | its file-target idea is ours; slow-moving             |
+| ComfyUI              | GPL-3.0                         | v0.44.0 (2026-11-04)        | ~145k | one Python process, HTTP + ws     | one in-process queue            | *image node*, not the spine                           |
+
+** (B) 24/7 playout
+
+| Project            | License  | Latest release (date)      | Always-on process?         | HLS out?             | Worth borrowing                                          |
+|--------------------+----------+----------------------------+----------------------------+----------------------+----------------------------------------------------------|
+| Ours: R2 + Worker  | repo     | live since 2026-11-06      | *no* (edge, scales to zero) | yes, synthesized     | baseline                                                 |
+| ffplayout          | GPL-3.0  | v2.7.1 (2026-10-28)        | yes, ffmpeg encoder        | yes, default output  | daily JSON playlist, =day_start=, filler folder, dummy clip |
+| Liquidsoap         | GPL-2.0  | v2.4.6 (2026-10-09)        | yes                        | yes (=output.file.hls=) | fallback/switch chain; bolt-on if a live feed is ever needed |
+| ErsatzTV           | Zlib     | v26.12.0 (2026-11-06)      | per viewer, on demand      | yes                  | channel schedules, filler presets, EPG                   |
+| Tunarr             | Zlib     | v2026.11.1 (2026-11-02)    | per viewer, on demand      | not confirmed        | time-slot and random-slot scheduling, prerolls           |
+| OBS + obs-websocket | GPL-2.0 | 33.0.1 (2026-10-29)        | yes, GUI + GPU             | weak                 | nothing; headless is fragile                             |
+| Owncast            | MIT      | v0.3.0 (2026-09-03)        | yes, transcodes ingest     | yes                  | chat, if wanted                                          |
+| SRS / MediaMTX     | MIT      | v6.0-r3 / v1.21.3 (Oct 2026) | relay, needs live publisher | yes                | nothing for pre-rendered media                           |
+| GStreamer          | LGPL-2.1 | 1.28.9 (2026-11-06)        | if used live               | yes (hlssink)        | framework only                                           |
+| nginx-rtmp-module  | BSD-2    | v1.2.2 (2021)              | relay                      | yes                  | *unmaintained*                                           |
+
+** (C) Real-time media agents
+
+| Project        | License    | Latest (date)         | What it is                                         | Local models                                   | Fit                                         |
+|----------------+------------+-----------------------+----------------------------------------------------+------------------------------------------------+---------------------------------------------|
+| Pipecat        | BSD-2      | 1.15.0 (2026-10-29)   | frame pipeline: transport, STT, LLM, TTS           | in-tree Ollama, Kokoro, Piper (GPL), Whisper  | live tutor/call-in, fully local; not batch |
+| LiveKit Agents | Apache-2.0 | 1.8.11 (2026-11-05)   | voice agents in LiveKit WebRTC rooms               | OpenAI plugin with =base_url=; no Kokoro plugin | needs LiveKit server; telephony strength   |
+
+Neither bridges to HLS; a live segment would need an encoder (Liquidsoap) writing segments to R2.
+
+** (D) Agent harness for agentic nodes
+
+| Harness           | License | Latest (date)               | Local OpenAI-compatible model                       | Notes                                                                       |
+|-------------------+---------+-----------------------------+-----------------------------------------------------+-----------------------------------------------------------------------------|
+| dsh (DeepSeek)    | MIT     | 0.2.2-rc.1 (2026-11-04); box pins 0.2.1-rc.5 | yes, =dsh-llm-pi-ai= route =api: openai-completions= | rc-only developer preview, breaking changes announced; =session-log-deepseek= upload on by default |
+| Claude Agent SDK  | MIT (Py) / see README (TS), Commercial Terms | Py 0.2.179, npm 0.3.319 (2026-11-06) | *not supported* on non-Claude models     | best permissions, hooks, subagents, skills; Anthropic API, Bedrock, Vertex, Foundry |
+| opencode          | MIT     | 1.19.5 (2026-10-28)         | documented for llama-server                         | fallback harness for local Qwen                                             |
+| OpenAI Agents SDK | MIT     | 0.24.0 (2026-10-15)         | yes, provider-agnostic                              | library for thin agent loops                                                |
+| Goose             | Apache-2.0 | v1.57.0 (2026-10-28)     | Ollama + providers                                  | now under the Linux Foundation's Agentic AI Foundation                      |
+| Codex CLI         | Apache-2.0 | 0.167.0 (2026-11-06)     | =--oss= via Ollama/LM Studio                        | needs a Responses API; llama-server support unconfirmed                     |
+| smolagents / Aider / OpenHands | Apache-2.0 / Apache-2.0 / MIT | 1.26.0 (May) / 0.86.2 (Feb) / 1.11.0 (Jul 2026) | yes | slowing releases or heavy (OpenHands: Docker app) |
+
+Both dsh and the Claude Agent SDK read =AGENTS.md= and =skills/<name>/SKILL.md= with =name=/=description=
+frontmatter, so keeping agent knowledge in that layout keeps the harness swappable. Note for the box: dsh's web
+profile defaults to port 3080; Puddle Park's 3081 is its own override behind =gate.js= on 3080.
+
+** (E) Language-channel sources
+
+| Source                    | License                                         | Last activity  | Contents                                             | Use?                                   |
+|---------------------------+-------------------------------------------------+----------------+------------------------------------------------------+----------------------------------------|
+| SBLGNT                    | CC BY 4.0 (since v1.1, 2022-12)                 | v1.2 2023-07   | Greek NT text + apparatus                            | yes, credit SBL and Logos              |
+| MorphGNT (sblgnt)         | morphology CC BY-SA 3.0; README cites old EULA  | 2024-01        | POS, parsing, lemma per word                         | prefer MACULA (no SA)                  |
+| MACULA Greek              | CC BY 4.0 (Biblica); Berean glosses PD          | 2026-07        | SBLGNT and Nestle 1904 trees, morphology, glosses    | *primary*; drop MARBLE fields          |
+| Nestle 1904               | text PD; morphology CC0                         | 2023-05        | text, morphology, lemmas                             | PD fallback                            |
+| OpenGNT                   | CC BY-SA 4.0 + mixed third-party layers         | 2022-04        | text, interlinear                                    | no (weak, mixed permissions)           |
+| Tyndale House GNT         | all rights reserved (2nd-hand)                  | n/a            | text                                                 | no (unverifiable licence)              |
+| OSHB morphhb              | WLC text PD; lemmas/morphology CC BY 4.0        | 2024-08        | pointed and accented WLC, Strong's-keyed lemmas      | *primary*                              |
+| UXLC / WLC                | free to copy (tanach.us, 2nd-hand)              | UXLC 2.4 2025-10 (2nd-hand) | text                                    | via OSHB                               |
+| MACULA Hebrew             | CC BY 4.0; SDBH fields "used with permission"   | 2026-04        | WLC trees, morphology, glosses                       | *primary*; drop SDBH                   |
+| ETCBC / BHSA              | data CC BY-NC 4.0 (code MIT)                    | 2026-01        | full linguistic database                             | *no* (NC)                              |
+| STEPBible-Data            | CC BY 4.0, share changes back                   | 2026-11-02     | TAHOT, TAGNT, abridged BDB (TBESH), Abbott-Smith (TBESG) | yes for Hebrew; TAGNT rests on NA27/28 |
+| Clementine Vulgate        | PD text (Tweedale edition, 2nd-hand statement)  | 2017           | Latin text                                           | *primary*                              |
+| Nova Vulgata              | (c) Libreria Editrice Vaticana                  | n/a            | Latin text                                           | *no* without permission                |
+| PROIEL treebank           | CC BY-NC-SA 3.0                                 | 2023           | annotated Vulgate NT                                 | *no* (NC)                              |
+| Perseus canonical / First1KGreek | CC BY-SA 4.0                             | 2026-11        | classical and patristic TEI                          | optional (SA)                          |
+| Whitaker's Words (mk270)  | "any and all use" permitted                     | 2026-11-03     | Latin dictionary + inflections                       | yes; no vowel length                   |
+| Collatinus                | GPL-3.0 (tool)                                  | v11.2          | lemmatiser with vowel quantities                     | yes, as a tool                         |
+| Morpheus                  | MPL-2.0                                         | 2023-01        | Latin/Greek analyser                                 | optional                               |
+| CLTK                      | MIT                                             | 2.5.1 (2026-02) | NLP; Latin transcriber only in 1.x (2nd-hand)       | pin 1.x if used                        |
+| LiLa Lemma Bank           | CC BY-SA 4.0                                    | n/a            | Latin lemmas, linked data                            | linking only                           |
+| Strong's (openscriptures) | no licence file; 1890 source PD                 | n/a            | Strong's dictionaries                                | via OSHB lexicon instead               |
+| OSHB HebrewLexicon        | CC BY 4.0; BDB text PD                          | 2019           | BDB, Strong's index                                  | yes                                    |
+| Dodson Greek lexicon      | PD                                              | n/a            | short glosses                                        | yes, on-screen glosses                 |
+| Abbott-Smith (TEI)        | PD                                              | 2017           | Greek NT lexicon                                     | yes                                    |
+| Lewis & Short (Perseus)   | CC BY-SA                                        | n/a            | Latin lexicon                                        | optional (SA)                          |
+
+| TTS / pronunciation       | Languages                     | License                          | Use?                                                   |
+|---------------------------+-------------------------------+----------------------------------+--------------------------------------------------------|
+| espeak-ng                 | la, grc, el, he (he "testing") | GPL-3.0+                        | IPA source and fallback voice; =la= rules are Classical (c = k) |
+| Piper (OHF-Voice/piper1-gpl) | it_IT, el_GR; no la/grc/he | engine GPL-3.0; voices per model card | *main voice*, phonemes via =[[ ... ]]=           |
+| piper-he-noa (community)  | he                            | CC BY 4.0 (2nd-hand)             | Hebrew voice; verify on Hugging Face                   |
+| Chatterbox Multilingual   | he, el, it                    | MIT; unmaintained; watermark     | text-only fallback (no phoneme control)                |
+| Kokoro                    | it only of these              | Apache-2.0                       | Italian only; own phonemizer                           |
+| phonikud / renikud        | he phonemization              | CC BY 4.0                        | ideas and rules for niqqud to IPA                      |
+| Meta MMS-TTS, XTTS-v2, phonikud-tts, SASPEECH | various     | non-commercial                   | *no*                                                   |
+
+| Hebrew text rendering        | Verified                                                         | Use?                         |
+|------------------------------+------------------------------------------------------------------+------------------------------|
+| Headless Chromium (HTML/CSS) | full bidi, OpenType mark/mkmk, font fallback                     | *recommended* for cards      |
+| libass (ffmpeg =ass= filter) | requires FriBidi and HarfBuzz; 0.17.5 (2026-06-24), ISC          | timed subtitles              |
+| ffmpeg drawtext              | HarfBuzz shaping since 6.1; bidi only with libfribidi; one font, no fallback | simple lines only |
+| Blender text                 | no RTL or complex shaping (2nd-hand)                             | *no*                         |
+| Fonts                        | Noto Serif/Sans Hebrew: 31/31 te'amim, 24/24 niqqud, mark+mkmk (OFL); Cardo full coverage but no mkmk; Ezra SIL (OFL); SBL Hebrew commercial use needs a paid licence (2nd-hand) | Noto Serif Hebrew |
+
+Licence rules for the stream: NC material is out (ads or sponsorship break it; even a free channel is grey). SA data
+shown on screen can make the video an adaptation under BY-SA, so use the PD originals behind SA layers. Every CC BY
+source needs a recurring on-screen credit card and a description line; the =provenance= field in the node contract
+below carries that.
+
+** Pronunciation approach per language
+
+| Language | Varieties                            | Rule source                                                     | Voice                          |
+|----------+--------------------------------------+-----------------------------------------------------------------+--------------------------------|
+| Latin    | Ecclesiastical (default), Classical  | own Italianate rules; Classical from espeak-ng =la= or CLTK 1.x, vowel length from Collatinus | Piper it_IT       |
+| Greek    | reconstructed Koine (default), Erasmian, restored Attic | own Koine rules (close to Modern Greek); Erasmian by rule; Attic from espeak-ng =grc= | Piper el_GR |
+| Hebrew   | Israeli-Sephardi                     | own niqqud-to-IPA rules: dagesh, shewa na/nach and qamets qatan from OSHB morphology; stress from the te'amim | piper-he-noa or Chatterbox he |
+
+Cache audio per verse and variety, review by ear, keep a hand-override lexicon. A deterministic =gloss-check= node
+(every displayed form, lemma and parsing must exist in the corpus row it cites) is the language channel's version of
+AI-247's fact check.
+
+* Proposed node contract (sketch)
+
+The contract is files, not a framework API. Every orchestrator in the verdict (or a 50-line loop) can drive it, and a
+node can be swapped by changing one line of the channel config. It generalises what both channels already do: the
+Puddle Park producer writes =inbox/<scene>.json= atomically (=.tmp= then rename) and the worker moves it to
+=done/= or =failed/=; AI-247 writes =episode/{script,plan,report}.json= and a =manifest.json= per bulletin.
+
+** Job folder
+
+#+begin_example
+jobs/<channel>/<run_id>/<step>/            one folder per node execution
+  job.json        written by the runner before start (inputs, params, node ref, attempt)
+  in/             symlinks or copies of upstream outputs (read-only to the node)
+  out/            everything the node produces; nothing else is read downstream
+  result.json     written LAST by the node, atomically (out/... first, then result.json.tmp -> rename)
+  log.txt         stdout/stderr
+#+end_example
+
+Rules:
+1. A step is done when =result.json= exists with =status= in {ok, degraded}. =failed= or a missing file after the
+   timeout means retry (up to =retries=) and then the channel's fallback node.
+2. Nodes are pure with respect to the folder: same =job.json= + same =in/= gives an equivalent =out/=. Side effects
+   (R2 PUT, D1 write, Git commit) live only in nodes of kind =publish= and must be idempotent (same key, same bytes).
+3. =resources= in the node manifest is the scheduling contract: =gpu: 1= nodes on one box run through a single
+   GPU lane (one queue, concurrency set per node, as channel_worker.py's =--renders 4= is today).
+4. Secrets never enter =job.json=; the runner injects them as env vars only into nodes that declare them.
+5. Agentic nodes (showrunner, engineer, discovery) produce proposals in =out/=; anything that runs code on air
+   passes an approval node (human or automated test) first, as Puddle Park's =channel approve= does today.
+
+** Node manifest (one per node implementation)
+
+#+begin_src yaml
+# nodes/tts-kokoro/node.yaml
+id: tts-kokoro
+version: 1.2.0
+kind: tts                         # llm-text | agent | tts | image | animate | render | encode | publish | gate
+runs_on: [gh-actions, gpu-box, cpu-box]
+resources: {gpu: 0, cpu: 2, ram_gb: 2, timeout_s: 600}
+retries: 2
+entry: python -m nodes.tts_kokoro  # called as: <entry> <job folder>
+inputs:
+  script: {type: script.v1}        # JSON schema names shared by all channels
+outputs:
+  audio:  {type: audio.v1, path: out/voice.wav}
+  timing: {type: timing.v1, path: out/timing.json}
+params:
+  voice: {type: string, default: af_heart}
+  lang:  {type: string, enum: [en-us, la-eccl, la-class, grc-koine, grc-erasmian, he-il]}
+secrets: []
+#+end_src
+
+** result.json
+
+#+begin_src json
+{"node": "tts-kokoro@1.2.0", "status": "ok", "started": "2026-11-07T10:00:00Z", "seconds": 41.2,
+ "outputs": {"audio": "out/voice.wav", "timing": "out/timing.json"},
+ "metrics": {"chars": 1840, "audio_s": 118.5}, "cost_usd": 0.0, "model": "kokoro-v1.0.int8.onnx",
+ "warnings": [], "provenance": [{"source": "SBLGNT", "license": "CC BY 4.0", "ref": "John 1:1-5"}]}
+#+end_src
+
+=provenance= travels with the media to the block manifest, so on-screen source cards (AI-247) and text-licence
+credits (language channel) come from the same field.
+
+** Channel config (a channel is a graph of node refs)
+
+#+begin_src yaml
+# channels/lingua/channel.yaml
+id: lingua
+prefix: lingua/                    # R2 prefix; the Worker is deployed unchanged with PREFIX=lingua/
+cadence: {kind: blocks, block_s: 600, keep_fresh_ahead_s: 3600}
+segment: {seconds: 6, video: h264-720p30-gop2-closed, audio: aac-48k}   # the seam contract, shared by every channel
+graph:
+  pick:     {node: lesson-planner@1,   params: {lang: grc-koine, corpus: sblgnt-morphgnt}}
+  script:   {node: llm-text@2,         after: [pick], params: {model: local-qwen, fallback: claude-haiku-5-5}}
+  check:    {node: gloss-check@1,      after: [script]}          # deterministic: every form/lemma/gloss exists in the corpus
+  voice:    {node: tts-grc@1,          after: [check], params: {pronunciation: koine-reconstructed}}
+  cards:    {node: text-cards-html@1,  after: [check], params: {font: SBL-Greek, rtl: false}}
+  compose:  {node: compose-ffmpeg@1,   after: [voice, cards]}
+  publish:  {node: publish-r2@1,       after: [compose]}         # newsbot/publish.py: segments first, manifest last
+fallback: {voice: tts-espeak@1}
+#+end_src
+
+The seam contract (6 s segments, H.264 720p30, closed 2 s GOP, AAC 48 kHz) is what lets every channel share
+=newsbot/publish.py=, =newsbot/channel.py= and =worker/src= unchanged; it stays a channel-level constant, not a node
+parameter.
+
+* How AI-247 and Puddle Park map onto it
+
+| Node kind  | AI-247 today (main)                                          | Puddle Park today (studio-puddle-park)                     | Language channel (new)                                         |
+|------------+--------------------------------------------------------------+------------------------------------------------------------+----------------------------------------------------------------|
+| source     | =newsbot/feeds.py=, =hourly.py= plan (feeds, aired memory)  | =producer/brief.md=, directions, =notes.md=               | corpus loader: SBLGNT+MorphGNT, OSHB, Vulgate, STEPBible      |
+| pick/plan  | =rank.py=, =topics.py=, =research.py=, Fable plan call      | showrunner agent (dsh) -> directions                      | lesson planner: next passage + grammar point, spaced review    |
+| llm-text   | =llm.py= writer (Haiku)                                     | =producer_loop.py= (local Qwen, JSON schema + repair)     | lesson writer (local Qwen or Haiku)                            |
+| gate       | fresh-context fact check + number/name grounding            | =repair()=, owner =channel approve= for plug-in actions   | morphology check against corpus (deterministic), no free claims |
+| agent      | discovery (Fable + web search)                              | showrunner, engineer (dsh)                                | optional: curriculum agent proposes units, owner approves     |
+| tts        | =tts.py= Kokoro / espeak-ng                                 | =engine/voice.py= Kokoro + mouth envelope                 | per-language TTS (see Verdict), espeak-ng fallback           |
+| image      | none                                                        | =backdrops.py= MOSS in ComfyUI                             | optional manuscript-style backdrops via ComfyUI               |
+| render     | =cards.py= / =render.py= skia templates                     | =engine/puddle.py= Blender                                | HTML/CSS cards in headless Chromium (Hebrew RTL + niqqud)     |
+| encode     | =episode.py= ffmpeg HLS cut                                 | =channel_worker.py= =make_block=                           | same encode node                                               |
+| publish    | =publish.py= + =channel.py= -> R2 root, Worker =ai247-live= | same code, =PREFIX=puddle/=, Worker =aitv-live=          | same code, =PREFIX=lingua/=                                     |
+| runner     | GitHub Actions matrix (=hourly.yml=)                        | bash loops on the GPU box (=run_*.sh=)                    | GPU box lane for TTS/LLM; Actions for CPU-only nodes         |
+
+What changes for each channel is small: AI-247's stages already write JSON hand-offs into =episode/=, so wrapping them
+as nodes is mostly a =result.json= per stage and a =channel.yaml=. Puddle Park's =inbox/ done/ failed/= queue is
+already the contract's shape; the change is a per-scene job folder instead of loose files and a declared GPU lane in
+place of the ad hoc "MOSS windows between blocks".
+
+* Migration order (smallest first)
+
+1. Write =nodes/*/node.yaml= and =result.json= for AI-247's existing stages without moving code; =hourly.yml= keeps
+   calling them. The seam contract and =publish.py= are already shared.
+2. On the GPU box, replace the =run_*.sh= loops with one DBOS (or Huey) runner that owns the =gpu= lane; MOSS
+   windows become ordinary =image= jobs in that lane instead of a pause between blocks. This also gives the box the
+   boot script the studio README lists as missing.
+3. Build the language channel on the contract from the start: corpus loader, lesson planner, gloss-check,
+   pronunciation rules + Piper, HTML cards in Chromium, the shared encode and publish nodes, =PREFIX=lingua/=.
+4. Only then add a =schedule= node (ffplayout-style daily JSON) if fixed-time programming is wanted.
+
+* Experts and sources
+
+** People and references worth reading (memory unless linked; check before citing)
+- James Tauber: MorphGNT maintainer (memory). https://github.com/morphgnt/sblgnt
+- Clear Bible / Biblica MACULA team. https://github.com/Clear-Bible/macula-greek , https://github.com/Clear-Bible/macula-hebrew
+- Open Scriptures (OSHB). https://github.com/openscriptures/morphhb
+- STEP Bible (Tyndale House, Cambridge). https://github.com/STEPBible/STEPBible-Data
+- Randall Buth: reconstructed Koine pronunciation, Biblical Language Center (memory, *weak*: no primary page read).
+- W. Sidney Allen, /Vox Latina/ and /Vox Graeca/: standard references for restored Classical pronunciation (memory, *weak*).
+- thewh1teagle: phonikud / Hebrew phonemization. https://github.com/thewh1teagle/phonikud
+
+** Orchestration
+- https://github.com/dbos-inc/dbos-transact-py (README, =dbos/_dbos_config.py=)
+- https://github.com/coleifer/huey
+- https://github.com/PrefectHQ/prefect (docs in repo: =docs/v3/concepts/server.mdx=, global concurrency limits)
+- https://github.com/hatchet-dev/hatchet
+- https://github.com/dagster-io/dagster
+- https://github.com/temporalio/temporal
+- https://github.com/celery/celery , https://github.com/rq/rq , https://github.com/python-arq/arq
+- https://github.com/procrastinate-org/procrastinate
+- https://github.com/apache/airflow , https://github.com/kestra-io/kestra , https://github.com/spotify/luigi
+- https://github.com/windmill-labs/windmill , https://github.com/n8n-io/n8n
+- https://github.com/Comfy-Org/ComfyUI (=server.py=, =script_examples/websockets_api_example.py=)
+- Registries: https://pypi.org/pypi/<package>/json , https://registry.npmjs.org/<package>
+
+** Playout
+- https://github.com/ffplayout/ffplayout
+- https://github.com/savonet/liquidsoap (=doc/content/hls_output.md=)
+- https://github.com/ErsatzTV/ErsatzTV , https://github.com/chrisbenincasa/tunarr
+- https://github.com/obsproject/obs-studio , https://github.com/obsproject/obs-websocket
+- https://github.com/owncast/owncast , https://github.com/ossrs/srs , https://github.com/bluenviron/mediamtx
+- https://github.com/GStreamer/gstreamer (mirror; canonical GitLab unreachable) , https://github.com/arut/nginx-rtmp-module
+
+** Real-time agents and harnesses
+- https://github.com/pipecat-ai/pipecat , https://github.com/livekit/agents
+- https://github.com/deepseek-ai/deepseek-harness ; https://registry.npmjs.org/@deepseek-ai/dsh (and =dsh-llm-pi-ai=, =dsh-session-log-deepseek= packages)
+- https://code.claude.com/docs/en/agent-sdk/overview , https://code.claude.com/docs/en/llm-gateway
+- https://github.com/anthropics/claude-agent-sdk-python , https://github.com/anthropics/claude-agent-sdk-typescript
+- https://github.com/anomalyco/opencode (=packages/web/src/content/docs/providers.mdx=)
+- https://github.com/openai/openai-agents-python , https://github.com/huggingface/smolagents
+- https://github.com/OpenHands/OpenHands , https://github.com/Aider-AI/aider , https://github.com/aaif-goose/goose , https://github.com/openai/codex
+- https://github.com/ggml-org/llama.cpp/pull/17570 (Anthropic Messages endpoint in llama-server)
+
+** Language data
+- https://github.com/LogosBible/SBLGNT , https://github.com/morphgnt/sblgnt , https://github.com/biblicalhumanities/Nestle1904
+- https://github.com/eliranwong/OpenGNT (*weak*: mixed permissions)
+- https://github.com/openscriptures/morphhb , https://github.com/ETCBC/bhsa , https://github.com/STEPBible/STEPBible-Data
+- https://tanach.us/Pages/Supplements.html (2nd-hand, host unreachable)
+- https://sourceforge.net/projects/vulsearch/ , https://github.com/lukesmithxyz/vul (PD statement 2nd-hand)
+- https://www.vatican.va/roman_curia/institutions_connected/lev/docs_lev/copyright_en.htm
+- https://github.com/PerseusDL/canonical-latinLit , https://github.com/PerseusDL/canonical-greekLit , https://github.com/OpenGreekAndLatin/First1KGreek
+- https://github.com/proiel/proiel-treebank , https://github.com/mk270/whitakers-words , https://github.com/cltk/cltk
+- https://github.com/perseids-tools/morpheus , https://github.com/biblissima/collatinus , https://github.com/CIRCSE/LiLa_Lemma-Bank
+- https://github.com/openscriptures/strongs , https://github.com/openscriptures/HebrewLexicon
+- https://github.com/biblicalhumanities/Dodson-Greek-Lexicon , https://github.com/translatable-exegetical-tools/Abbott-Smith , https://github.com/PerseusDL/lexica
+- Tyndale House GNT: https://www.bible.com/versions/2270 (*weak*, no licence text found)
+
+** Pronunciation, TTS and rendering
+- https://github.com/espeak-ng/espeak-ng (=docs/languages.md=, =dictsource/{la,grc,he}_rules=)
+- https://github.com/OHF-Voice/piper1-gpl (=docs/VOICES.md=, =docs/CLI.md=); https://github.com/rhasspy/piper (archived)
+- https://huggingface.co/thewh1teagle/piper-he-noa (2nd-hand, host blocked)
+- https://github.com/resemble-ai/chatterbox , https://github.com/hexgrad/kokoro
+- https://github.com/idiap/coqui-ai-TTS (XTTS languages; CPML licence from memory, *weak*)
+- https://github.com/facebookresearch/fairseq/blob/main/examples/mms/README.md (MMS licence CC BY-NC 4.0)
+- https://github.com/thewh1teagle/phonikud , https://github.com/thewh1teagle/renikud , https://openslr.org/134/
+- FFmpeg =libavfilter/vf_drawtext.c= and =configure= (master, release/6.0, release/6.1): https://github.com/FFmpeg/FFmpeg
+- https://github.com/libass/libass (=meson.build=)
+- https://devtalk.blender.org/t/help-needed-with-rtl-complex-language-support/37819 (2nd-hand)
+- https://github.com/notofonts/hebrew , https://github.com/google/fonts (=ofl/notoserifhebrew=, =ofl/cardo=; coverage counted with fontTools)
+- https://www.sbl-site.org/fonts (2nd-hand), https://culmus.sourceforge.io/taamim/
+
+** Not verified
+- Exact star counts and last-commit dates (GitHub API blocked); dsh's reported star count looks wrong for a
+  three-month-old preview.
+- Hosts unreachable from the session: docs.comfy.org, docs.prefect.io, docs.dbos.dev, liquidsoap.info,
+  docs.pipecat.ai, opencode.ai, sblgnt.com, huggingface.co, tanach.us, software.sil.org, ffmpeg.org.
+- Not run here: any of the pronunciation rules, Piper phoneme input in it_IT/el_GR, or Hebrew rendering in Chromium.
+  These are the first spikes for the language channel.
