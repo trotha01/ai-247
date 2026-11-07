@@ -19,4 +19,9 @@ The services are systemd *user* units of the installing account (lingering on, s
     systemctl --user disable --now lang-worker lang-producer   # stop and keep it off after reboot
     curl -s https://lang-live.trotha01.workers.dev/healthz  # what is on air
 
+From another account (e.g. Mychal, with sudo), prefix the commands to act as the owner, here `trevor`:
+
+    sudo -u trevor XDG_RUNTIME_DIR=/run/user/$(id -u trevor) systemctl --user status lang-worker
+    sudo journalctl _SYSTEMD_USER_UNIT=lang-worker.service -f
+
 Update to the latest code: `bash src/ai-247/deploy/box/install.sh lang` (re-runnable).
