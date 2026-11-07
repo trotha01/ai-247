@@ -25,10 +25,12 @@ Pipeline base (why in brief):
 
 Language channel stack:
 - *Text and morphology:* MACULA Greek (SBLGNT, CC BY 4.0); OSHB + MACULA Hebrew (WLC public domain, CC BY 4.0);
-  Clementine Vulgate (PD) with Whitaker's Words. Glosses: Berean/Dodson (PD), OSHB lexicon and STEPBible (CC BY).
+  Clementine Vulgate (the 1592 text is PD by age; the Tweedale edition's PD statement is 2nd-hand, verify) with
+  Whitaker's Words (README grants "any and all use"). Glosses: Berean/Dodson (PD), OSHB lexicon and STEPBible (CC BY).
 - *Excluded:* non-commercial sources (BHSA, PROIEL, MMS-TTS, XTTS), Nova Vulgata, and SBL Hebrew if monetized.
 - *Audio:* own text-to-IPA rules per pronunciation fed as phonemes to Piper it_IT / el_GR / a community he voice;
-  espeak-ng as IPA source and fallback.
+  espeak-ng as IPA source and fallback. The he voice's CC BY 4.0 licence is 2nd-hand (Hugging Face was blocked):
+  verify its model card before it airs.
 - *On-screen text:* HTML/CSS cards in headless Chromium with Noto Serif Hebrew (full niqqud and te'amim), then ffmpeg.
 
 * Comparison tables
