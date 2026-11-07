@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Puddle Park Architecture</title>
+<meta name="description" content="Node graph of the Puddle Park channel: what runs where and what flows between the parts, mapped from the code.">
+<style>
+:root{--bg:#fff;--fg:#111;--muted:#666;--card:#f6f6f6;--line:#888;--acc:#d6334f;--g:#eef4ff;--c:#fff4e8;--b:#eefaf0;--node:#fff;--stroke:#bbb;--link:#0645ad}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111;--fg:#eee;--muted:#aaa;--card:#1d1d1d;--line:#999;--acc:#ff6b81;--g:#17203a;--c:#2e2214;--b:#142a1a;--node:#222;--stroke:#555;--link:#8ab4ff}}
+:root[data-theme="dark"]{--bg:#111;--fg:#eee;--muted:#aaa;--card:#1d1d1d;--line:#999;--acc:#ff6b81;--g:#17203a;--c:#2e2214;--b:#142a1a;--node:#222;--stroke:#555;--link:#8ab4ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0}
+p{margin:6px 0}.muted{color:var(--muted);font-size:13px}
+a{color:var(--link)}
+.wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+svg{width:100%;max-width:400px;height:auto;flex:1 1 320px}
+.lane{stroke:none}.lane.g{fill:var(--g)}.lane.c{fill:var(--c)}.lane.b{fill:var(--b)}
+.lt{font-size:11px;font-weight:700;fill:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.n rect{fill:var(--node);stroke:var(--stroke);stroke-width:1.2}
+.n{cursor:pointer;outline:none}.n:hover rect,.n:focus rect,.n.on rect{stroke:var(--acc);stroke-width:2.2}
+.nt{font-size:12.5px;font-weight:650;fill:var(--fg)}.ns{font-size:10px;fill:var(--muted)}
+.e{fill:none;stroke:var(--line);stroke-width:1.3}.e.on{stroke:var(--acc);stroke-width:2.2}
+.el{font-size:9.5px;fill:var(--fg);paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+#ar path{fill:var(--line)}
+#panel{flex:1 1 280px;background:var(--card);border-radius:10px;padding:12px 14px;position:sticky;top:12px;min-height:120px}
+#panel h2{font-size:17px;margin:0 0 6px}
+#panel dt{font-weight:650;font-size:12px;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.04em}
+#panel dd{margin:2px 0 0}code{font-size:12px;word-break:break-word}
+footer{margin-top:20px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>Puddle Park: how the channel works</h1>
+<p>Every box is a part of the code on branch <code>studio-puddle-park</code> (<code>studio/</code>) plus the shared ai-247 stream path. Bands show where each part runs. Arrows show what flows. Hover or tap a box for its details.</p>
+<div class="wrap">
+<svg viewBox="0 0 368 950" role="img" aria-label="Puddle Park architecture node graph">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10z"/></marker></defs>
+<rect class="lane g" x="4" y="40" width="352" height="600" rx="10"/><text class="lt" x="14" y="58">GPU box (rented)</text>
+<rect class="lane c" x="4" y="612" width="352" height="200" rx="10"/><text class="lt" x="14" y="630">Cloudflare</text>
+<rect class="lane b" x="4" y="836" width="352" height="110" rx="10"/><text class="lt" x="14" y="854">Browser</text>
+<path class="e" data-a="show" data-b="writer" d="M94.0,122 L94.0,180" marker-end="url(#ar)"/>
+<path class="e" data-a="show" data-b="eng" d="M174,96.0 L186,96.0" marker-end="url(#ar)"/>
+<path class="e" data-a="eng" data-b="writer" d="M266.0,122 L94.0,180" marker-end="url(#ar)"/>
+<path class="e" data-a="eng" data-b="blender" d="M346,96 L352,96 L352,316 L347,316" marker-end="url(#ar)"/>
+<path class="e" data-a="writer" data-b="moss" d="M174,206.0 L186,206.0" marker-end="url(#ar)"/>
+<path class="e" data-a="moss" data-b="blender" d="M266.0,232 L266.0,290" marker-end="url(#ar)"/>
+<path class="e" data-a="writer" data-b="tts" d="M94.0,232 L94.0,290" marker-end="url(#ar)"/>
+<path class="e" data-a="tts" data-b="blender" d="M174,316.0 L186,316.0" marker-end="url(#ar)"/>
+<path class="e" data-a="blender" data-b="enc" d="M266.0,342 L180.0,400" marker-end="url(#ar)"/>
+<path class="e" data-a="tts" data-b="enc" d="M94.0,342 L180.0,400" marker-end="url(#ar)"/>
+<path class="e" data-a="enc" data-b="pub" d="M180.0,452 L180.0,500" marker-end="url(#ar)"/>
+<path class="e" data-a="pub" data-b="r2" d="M180.0,552 L94.0,640" marker-end="url(#ar)"/>
+<path class="e" data-a="r2" data-b="wk" d="M174,666.0 L186,666.0" marker-end="url(#ar)"/>
+<path class="e" data-a="r2" data-b="link" d="M94.0,692 L94.0,740" marker-end="url(#ar)"/>
+<path class="e" data-a="wk" data-b="player" d="M266.0,692 L266.0,870" marker-end="url(#ar)"/>
+<path class="e" data-a="link" data-b="studio" d="M94.0,792 L94.0,870" marker-end="url(#ar)"/>
+<path class="e" data-a="studio" data-b="show" d="M14,896 L8,896 L8,96 L13,96" marker-end="url(#ar)"/>
+<g class="n" tabindex="0" role="button" data-id="show" aria-label="Showrunner agent"><rect x="14" y="70" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="92" text-anchor="middle">Showrunner agent</text><text class="ns" x="94.0" y="109" text-anchor="middle">dsh · password gate</text></g>
+<g class="n" tabindex="0" role="button" data-id="eng" aria-label="Engineer agent"><rect x="186" y="70" width="160" height="52" rx="8"/><text class="nt" x="266.0" y="92" text-anchor="middle">Engineer agent</text><text class="ns" x="266.0" y="109" text-anchor="middle">writes puppet actions</text></g>
+<g class="n" tabindex="0" role="button" data-id="writer" aria-label="Scene writer"><rect x="14" y="180" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="202" text-anchor="middle">Scene writer</text><text class="ns" x="94.0" y="219" text-anchor="middle">producer_loop.py</text></g>
+<g class="n" tabindex="0" role="button" data-id="moss" aria-label="MOSS backdrops"><rect x="186" y="180" width="160" height="52" rx="8"/><text class="nt" x="266.0" y="202" text-anchor="middle">MOSS backdrops</text><text class="ns" x="266.0" y="219" text-anchor="middle">image library</text></g>
+<g class="n" tabindex="0" role="button" data-id="tts" aria-label="Kokoro TTS"><rect x="14" y="290" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="312" text-anchor="middle">Kokoro TTS</text><text class="ns" x="94.0" y="329" text-anchor="middle">voice.py</text></g>
+<g class="n" tabindex="0" role="button" data-id="blender" aria-label="Blender animation"><rect x="186" y="290" width="160" height="52" rx="8"/><text class="nt" x="266.0" y="312" text-anchor="middle">Blender animation</text><text class="ns" x="266.0" y="329" text-anchor="middle">puddle.py (headless)</text></g>
+<g class="n" tabindex="0" role="button" data-id="enc" aria-label="Segment encoder"><rect x="100" y="400" width="160" height="52" rx="8"/><text class="nt" x="180.0" y="422" text-anchor="middle">Segment encoder</text><text class="ns" x="180.0" y="439" text-anchor="middle">channel_worker.py · ffmpeg</text></g>
+<g class="n" tabindex="0" role="button" data-id="pub" aria-label="Publish"><rect x="100" y="500" width="160" height="52" rx="8"/><text class="nt" x="180.0" y="522" text-anchor="middle">Publish</text><text class="ns" x="180.0" y="539" text-anchor="middle">newsbot/publish.py</text></g>
+<g class="n" tabindex="0" role="button" data-id="r2" aria-label="R2 bucket"><rect x="14" y="640" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="662" text-anchor="middle">R2 bucket</text><text class="ns" x="94.0" y="679" text-anchor="middle">aitv-media · puddle/</text></g>
+<g class="n" tabindex="0" role="button" data-id="wk" aria-label="Worker playlist"><rect x="186" y="640" width="160" height="52" rx="8"/><text class="nt" x="266.0" y="662" text-anchor="middle">Worker playlist</text><text class="ns" x="266.0" y="679" text-anchor="middle">aitv-live</text></g>
+<g class="n" tabindex="0" role="button" data-id="link" aria-label="Showrunner link"><rect x="14" y="740" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="762" text-anchor="middle">Showrunner link</text><text class="ns" x="94.0" y="779" text-anchor="middle">Worker + quick tunnel</text></g>
+<g class="n" tabindex="0" role="button" data-id="player" aria-label="Player page"><rect x="186" y="870" width="160" height="52" rx="8"/><text class="nt" x="266.0" y="892" text-anchor="middle">Player page</text><text class="ns" x="266.0" y="909" text-anchor="middle">hls.js</text></g>
+<g class="n" tabindex="0" role="button" data-id="studio" aria-label="Studio chat page"><rect x="14" y="870" width="160" height="52" rx="8"/><text class="nt" x="94.0" y="892" text-anchor="middle">Studio chat page</text><text class="ns" x="94.0" y="909" text-anchor="middle">owner, password</text></g>
+<text class="el" x="94.0" y="154.0" text-anchor="middle">direction</text>
+<text class="el" x="180.0" y="99.0" text-anchor="middle">proposal</text>
+<text class="el" x="180.0" y="154.0" text-anchor="middle">approved action</text>
+<text class="el" transform="translate(357,206) rotate(90)" text-anchor="middle">action code</text>
+<text class="el" x="180.0" y="209.0" text-anchor="middle">image order</text>
+<text class="el" x="266.0" y="264.0" text-anchor="middle">backdrops</text>
+<text class="el" x="94.0" y="264.0" text-anchor="middle">script</text>
+<text class="el" x="180.0" y="319.0" text-anchor="middle">audio + timing</text>
+<text class="el" x="223.0" y="374.0" text-anchor="middle">frames</text>
+<text class="el" x="137.0" y="374.0" text-anchor="middle">audio</text>
+<text class="el" x="180.0" y="479.0" text-anchor="middle">.ts segments</text>
+<text class="el" x="137.0" y="599.0" text-anchor="middle">.ts + manifest</text>
+<text class="el" x="180.0" y="669.0" text-anchor="middle">manifest</text>
+<text class="el" x="94.0" y="719.0" text-anchor="middle">url.txt</text>
+<text class="el" x="266.0" y="784.0" text-anchor="middle">live.m3u8 + .ts</text>
+<text class="el" x="94.0" y="834.0" text-anchor="middle">redirect</text>
+<text class="el" x="30" y="832" text-anchor="middle">chat</text>
+</svg>
+<aside id="panel" aria-live="polite"><h2>Pick a box</h2><p class="muted">Tap or hover any node to see its role, inputs and outputs, source files and model.</p></aside>
+</div>
+<footer>Source: <a href="https://github.com/trotha01/ai-247/pull/39">PR #39</a> (studio/) · <code>newsbot/publish.py</code> · <code>worker/src</code> · <a href="./">ai-247 live</a></footer>
+</main>
+<script>
+const INFO={"show": {"t": "Showrunner agent", "role": "Chat agent the owner talks to through a password page (gate.js, one shared password, signed 30-day cookie, lockout after 10 misses). Steers the channel with the channel tool: standing directions, image orders, proposals for new puppet actions.", "in": "Owner chat (browser, via Cloudflare quick tunnel)", "out": "Directions \u2192 producer/directions/; proposals \u2192 proposals/", "files": "studio/showrunner/gate.js, start_showrunner.sh, channel, agents/skills/showrunner/SKILL.md, profile/cordis.yml", "model": "Qwen 3.8 27B (shared llama-server :8080), dsh web on :3081 behind gate :3080"}, "eng": {"t": "Engineer agent", "role": "Runs as unprivileged user \"eng\". Builder and reviewer take turns writing a plug-in puppet action, test it off air with eng-test, then hand it in with channel submit. Nothing airs until an owner runs channel approve.", "in": "Proposals from the showrunner", "out": "Approved action code \u2192 actions/live/ (read by producer and Blender)", "files": "studio/engineer/engineer_loop.py, eng-test, agents/skills/action-engineer/SKILL.md, studio/tools/approve.sh", "model": "Qwen 3.8 27B via dsh headless; owner approval gate"}, "writer": {"t": "Scene writer", "role": "Writes the channel one 15 s scene at a time, forever, keeping the inbox a few scenes deep. Repairs model output into a safe scene script and orders backdrops/title cards it needs.", "in": "Directions, notes.md, brief.md, approved actions, ready backdrops", "out": "Scene script JSON \u2192 inbox/; image orders \u2192 MOSS library", "files": "studio/pipeline/producer_loop.py, studio/box/run_llama.sh, studio/box/brief.md", "model": "Qwen3.8-27B-Uncensored IQ4_XS GGUF, llama.cpp, 32k unified KV, 4 slots, rented GPU"}, "moss": {"t": "MOSS backdrops", "role": "Paints panoramic backdrops (3.5:1) and title cards once, on request, and reuses them. Runs in short windows between blocks while Blender is idle, because the GPU is shared with Qwen.", "in": "Image orders from the scene writer", "out": "PNG backdrops and cards \u2192 library/", "files": "studio/pipeline/backdrops.py", "model": "MOSS-Image Turbo in ComfyUI (:8188, low-VRAM)"}, "tts": {"t": "Kokoro TTS", "role": "Voice pass before Blender: speaks each line per character voice, pitch-shifts, warns on overlaps, and writes a mouth envelope for lip sync.", "in": "Scene script", "out": "voices.wav + scene.voiced.json (timings, envelopes)", "files": "studio/engine/voice.py", "model": "kokoro-v1.0.int8.onnx (kokoro_onnx)"}, "blender": {"t": "Blender animation", "role": "Builds the felt puppet set from the voiced scene and renders frames. Runs as user \"render\" because approved plug-in actions are AI-written code.", "in": "scene.voiced.json, backdrops, approved actions", "out": "Rendered frames", "files": "studio/engine/puddle.py, studio/engine/make_clip.sh, studio/box/bl.sh", "model": "Blender (bpy), no ML model"}, "enc": {"t": "Segment encoder", "role": "Muxes frames + voices into 15 s clips (720p30, AAC 48 kHz, closed 2 s GOP), adds the title card, joins clips into a block and cuts 6 s HLS segments.", "in": "Frames, voices.wav, title card", "out": "seg_NNN.ts + block manifest.json", "files": "studio/pipeline/channel_worker.py (render_clip, add_card, make_block)", "model": "ffmpeg"}, "pub": {"t": "Publish", "role": "Shared ai-247 uploader (publish_many): segments first, root manifest last; earlier blocks kept as replays. The channel worker also deletes old unreferenced blocks to stay under the bucket cap.", "in": "Block directories", "out": "PUTs to R2 under prefix puddle/", "files": "newsbot/publish.py, newsbot/channel.py, newsbot/r2.py, docs/MANIFEST-SWAP.md", "model": "boto3 S3 API to R2"}, "r2": {"t": "R2 bucket", "role": "Holds everything the stream needs under the puddle/ prefix: manifest.json, block segments, the replay pool, plus showrunner/url.txt for the studio link.", "in": ".ts segments and manifests from Publish", "out": "Objects read by the Worker", "files": "docs/R2_LAYOUT.md, studio/cloudflare/aitv-live/wrangler.toml", "model": "\u2014"}, "wk": {"t": "Worker playlist", "role": "ai-247 worker/src deployed unchanged with PREFIX=puddle/. Builds a live sliding-window HLS playlist from the manifest, checks upcoming segments exist, fails over to the replay pool if the manifest is 30 min stale.", "in": "puddle/manifest.json, segment HEADs", "out": "live.m3u8 + proxied .ts segments", "files": "worker/src/index.js, playlist.js, channel.js, failover.js", "model": "Cloudflare Worker (WINDOW=5, MAX_MANIFEST_AGE_S=1800)"}, "link": {"t": "Showrunner link", "role": "Fixed URL for the studio. The GPU box publishes its changing trycloudflare.com tunnel address to R2; this Worker redirects to it, or says the showrunner is offline.", "in": "showrunner/url.txt from R2", "out": "302 redirect to the tunnel", "files": "studio/cloudflare/showrunner-link/src/index.js", "model": "\u2014"}, "player": {"t": "Player page", "role": "Static Puddle Park site: plays the live playlist with pinned hls.js 1.6.15 (same player as site/).", "in": "live.m3u8 + segments", "out": "Video on screen", "files": "studio/cloudflare/puddle-site/{index.html,player.js,config.json}, site/player.js", "model": "\u2014"}, "studio": {"t": "Studio chat page", "role": "The owner's page: chat with the showrunner beside the live stream; proposals panel.", "in": "Redirect from the link, password", "out": "Chat to the showrunner", "files": "studio/showrunner/gate.js (studio page)", "model": "\u2014"}};
+const P=document.getElementById('panel');
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function show(id){
+  const d=INFO[id];if(!d)return;
+  document.querySelectorAll('.n').forEach(n=>n.classList.toggle('on',n.dataset.id===id));
+  document.querySelectorAll('.e').forEach(e=>e.classList.toggle('on',e.dataset.a===id||e.dataset.b===id));
+  P.innerHTML='<h2>'+esc(d.t)+'</h2><p>'+esc(d.role)+'</p><dl><dt>Inputs</dt><dd>'+esc(d.in)+'</dd><dt>Outputs</dt><dd>'+esc(d.out)+'</dd><dt>Source files</dt><dd><code>'+esc(d.files)+'</code></dd><dt>Model / runtime</dt><dd>'+esc(d.model)+'</dd></dl>';
+}
+document.querySelectorAll('.n').forEach(n=>{
+  n.addEventListener('mouseenter',()=>show(n.dataset.id));
+  n.addEventListener('click',()=>{show(n.dataset.id);if(innerWidth<700)P.scrollIntoView({behavior:'smooth',block:'nearest'})});
+  n.addEventListener('focus',()=>show(n.dataset.id));
+});
+</script>
+</body>
+</html>
