@@ -4,7 +4,7 @@
 // overlap; every node opens a panel with its trigger, files and model; no horizontal scroll at phone width; dark mode
 // switches the background; the site footer links the page; repo paths named on the page exist.
 const { chromium } = require("playwright");
-const { spawn, execFileSync } = require("child_process");
+const { spawn } = require("child_process");
 const fs = require("fs"), os = require("os"), path = require("path");
 const [shots] = process.argv.slice(2);
 const repo = path.resolve(__dirname, "../..");
@@ -75,18 +75,8 @@ const overlap = (a, b, pad = 0) => a.x < b.x + b.w - pad && b.x < a.x + a.w - pa
       if (shots) { fs.mkdirSync(shots, { recursive: true }); await page.click('.n[data-id="writer"]'); await page.screenshot({ path: path.join(shots, `puddle-architecture-${scheme}-${width}.png`), fullPage: true }); }
       if (scheme === "light") {
         const files = await page.evaluate(() => [...new Set([...document.querySelectorAll("script")].map((s) => s.textContent.match(/"(?:studio|newsbot|worker|docs|site)\/[^"]+"/g) || []).flat().map((s) => s.slice(1, -1)))]);
-        const missing = [];
-        let studioRef = null;
-        for (const ref of ["origin/studio-puddle-park", "studio-puddle-park"]) {
-          try { execFileSync("git", ["rev-parse", "--verify", "-q", ref], { cwd: repo, stdio: "ignore" }); studioRef = ref; break; } catch {}
-        }
-        for (const f of files) {
-          if (f.startsWith("studio/")) {
-            if (!studioRef) continue;
-            try { execFileSync("git", ["cat-file", "-e", `${studioRef}:${f}`], { cwd: repo, stdio: "ignore" }); } catch { missing.push(f); }
-          } else if (!fs.existsSync(path.join(repo, f))) missing.push(f);
-        }
-        check(`source files named on the page exist (${files.length}; studio/ ${studioRef ? "checked on " + studioRef : "skipped: branch not fetched"})`, missing.length === 0, missing.join(" "));
+        const missing = files.filter((f) => !fs.existsSync(path.join(repo, f)));
+        check(`source files named on the page exist (${files.length})`, missing.length === 0, missing.join(" "));
       }
       await ctx.close();
     }

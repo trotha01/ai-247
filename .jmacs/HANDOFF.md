@@ -13,6 +13,8 @@ AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, write
 - PR #52 opened, subscribed to its activity. First CI run green (tests, worker-site-e2e, claude-review: 0 blocking; replied to its 4 optional findings in one PR comment).
 - Merge conflict with main: Trevor's PR #51 trimmed operational details (password-gate mechanics, tunnel, ports, bucket/key names, run-as users) and PR #49 added tests/test_deploy_guard.py (no workflow line may mention studio). Merged main, kept v2's layout with #51's trims applied to all new text, dropped the CI fetch of the Puddle Park branch (those paths are checked locally only).
 
+- Reviews 2 and 3 (0 blocking): trimmed llama-server flags and restart details; answered the rest on the PR. CI green on 8f0ab9a, then the merge hit a conflict: main gained studio/ (PRs #40-#44, so PR #39's code is now on main). Merged main again: page links and the render check's path check now use main (all 43 paths exist; CI verifies them too).
+
 ## Pending
 - PR #52 checks (tests, worker-site-e2e, claude-review), then squash-merge; confirm the page on https://ai-247.pages.dev/puddle-architecture.html after the Pages deploy.
 - jmacs todo-status done with the page URL (jmacs is not installed in cloud sessions; the orchestrator applies it from status.json).

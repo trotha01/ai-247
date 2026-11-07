@@ -89,8 +89,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/tools/node_modules
       - name: Puddle Park architecture page renders (light 1100 px, dark 360 px)
-        # Paths on the page that live on the Puddle Park branch are only checked locally: workflows never touch that
-        # code (tests/test_deploy_guard.py), so the check reports them as skipped here.
+        # Also checks that every repo path the page names exists in this checkout (read only, nothing is run).
         run: node site/test/e2e-architecture.js "$RUNNER_TEMP/arch-shots"
         env:
           NODE_PATH: ${{ runner.temp }}/tools/node_modules

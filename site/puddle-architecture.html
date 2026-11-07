@@ -44,13 +44,13 @@ footer{margin-top:22px;font-size:13px;color:var(--muted)}
 <body>
 <main>
 <h1>Puddle Park: how the channel works</h1>
-<p>Every box is a part of the code in <code>studio/</code> on branch <code>studio-puddle-park</code>, plus the ai-247 stream path it reuses unchanged. Bands show where each part runs. Arrows show what flows between them. Tap, hover or tab to a box for its role, trigger, inputs, outputs, source files and model.</p>
+<p>Every box is a part of the code in <code>studio/</code>, plus the ai-247 stream path it reuses unchanged. Bands show where each part runs. Arrows show what flows between them. Tap, hover or tab to a box for its role, trigger, inputs, outputs, source files and model.</p>
 <div class="legend" aria-hidden="true"><span style="--k:var(--g)">Rented GPU box (one RTX 3090)</span><span style="--k:var(--c)">Cloudflare</span><span style="--k:var(--b)">Browser</span></div>
 <div class="wrap">
 <svg id="graph" viewBox="0 0 368 888" role="group" aria-label="Puddle Park architecture node graph"></svg>
 <aside id="panel" aria-live="polite"><h2>Pick a box</h2><p class="muted">Each box opens its role, what starts it, what goes in and out, the files to read and the model it uses.</p></aside>
 </div>
-<footer>Mapped from <a href="https://github.com/trotha01/ai-247/pull/39">PR #39</a> (<code>studio/</code>, branch <code>studio-puddle-park</code>) and this repo's <code>newsbot/publish.py</code>, <code>newsbot/channel.py</code> and <code>worker/src</code>. Watch at <a href="https://puddle-park.pages.dev">puddle-park.pages.dev</a> · <a href="./">ai-247 live</a></footer>
+<footer>Mapped from <code>studio/</code> (PRs #40-#44) and this repo's <code>newsbot/publish.py</code>, <code>newsbot/channel.py</code> and <code>worker/src</code>. Watch at <a href="https://puddle-park.pages.dev">puddle-park.pages.dev</a> · <a href="./">ai-247 live</a></footer>
 </main>
 <script>
 "use strict";
@@ -232,7 +232,7 @@ NODES.forEach(([id,x,y,w,h,title,sub,info])=>{
 const P=document.getElementById("panel");
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const REPO="https://github.com/trotha01/ai-247/blob/";
-const href=f=>REPO+(f.startsWith("studio/")?"studio-puddle-park/":"main/")+f;
+const href=f=>REPO+"main/"+f;
 function show(id){
   const d=INFO[id];if(!d)return;
   document.querySelectorAll(".n").forEach(n=>n.classList.toggle("on",n.dataset.id===id));

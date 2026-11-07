@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Puddle Park: an always-on AI puppet channel</title>
+<meta name="description" content="Puddle Park: felt puppets, written and animated live by AI, around the clock.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Puddle Park</h1>
+  <span class="badge" id="ai-label" role="note">AI-GENERATED</span>
+</header>
+<main>
+  <p class="disclosure">Every scene on this channel is written, voiced and animated by AI as it airs. It is a test channel and may contain mistakes.</p>
+  <div class="player">
+    <video id="video" controls muted playsinline autoplay aria-label="AI-generated puppet show stream"></video>
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+  </div>
+  <p class="state">Stream state: <strong id="state">starting</strong></p>
+</main>
+<footer>
+  <p>Built on <a href="https://github.com/trotha01/ai-247">trotha01/ai-247</a>. Player uses <a href="https://github.com/video-dev/hls.js">hls.js</a>.</p>
+</footer>
+<!-- Pinned hls.js; SRI = sha384 of dist/hls.min.js from the npm package hls.js@1.6.15 (jsDelivr serves that file unmodified). -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"
+        integrity="sha384-iZBI1/lW9u8FcBjxuQ8nPTsU7TXhZNtzkV8H3gQHSTgz+VYQoKWqGlBHqhO84alJ"
+        crossorigin="anonymous"></script>
+<script src="player.js"></script>
+</body>
+</html>
