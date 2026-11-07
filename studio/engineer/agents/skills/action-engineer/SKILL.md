@@ -17,8 +17,11 @@ whenToUse: You are asked to build a request (proposal) for a new action, or to f
    the request asked, is nothing floating, broken, missing or inside another object, do the puppets still look right
    before and after? A viewer must understand the action without sound.
 6. Fix and repeat steps 4-5. At most 6 tries.
-7. When it looks right: write `notes.md` (2-4 lines: what the action does, how the producer should use it) and run
-   `channel submit <id> ~/work/<id>/action.py`. If it never looked right, do not submit: explain what is wrong instead.
+7. The engineer loop runs you in one of two roles and says which:
+   - BUILDER: steps 1-6, and stop as soon as eng-test finishes with no problems. Never submit.
+   - REVIEWER: look at the pictures and the code. If it looks right, write `notes.md` (2-4 lines: what the action does,
+     how the producer should use it) and run `channel submit <id> ~/work/<id>/action.py`. If not, write `review.md`
+     (at most 3 bullet points to fix) and do not submit.
 
 ## Plug-in file
 Four constants and a `run(api, ev)` function, nothing else at the top level (no imports needed: everything is on `api`).
