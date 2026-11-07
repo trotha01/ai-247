@@ -1,7 +1,14 @@
 name: pr-review
 
 # Claude review of every non-draft pull request, posted as one sticky comment and reported as the
-# status check `claude-review` (red when there is a blocking finding). See docs/CONTRIBUTING.md.
+# status check `claude-review`. See docs/CONTRIBUTING.md.
+#
+# Check policy (Trevor, 2026-11-07): `claude-review` FAILS only when the review completed and reported a blocking
+# finding (or a fork author is not allowlisted). When the review run itself errors (crash, timeout, the action's
+# turn cap, a token or rate limit, no structured verdict) the check is SKIPPED, which GitHub counts as passing, and
+# the sticky comment says in bold that nothing was reviewed. Two jobs make that possible: `review` does the work and
+# publishes a status; the `claude-review` job (the required check) runs only for a real verdict and is skipped
+# otherwise. A job cannot report "neutral" itself, and a skipped required job is treated as success.
 #
 # Safety model. This runs on `pull_request_target`, so it has the repository secrets and the
 # base branch's copy of this file, for PRs from forks too. Because of that it NEVER checks out or
@@ -28,15 +35,20 @@ env:
   FORK_REVIEW_AUTHORS: "EliasTheApe"
   # Cost caps: cheapest current model, a turn limit, a dollar limit per run, and a cap on the diff Claude is shown.
   REVIEW_MODEL: claude-haiku-5-5
-  MAX_TURNS: "12"
+  # claude-code-action fails its step when Claude's own turn count exceeds MAX_TURNS, even on a successful result
+  # (PR #39: "successful result after 14 turns, exceeding the configured maximum of 12"). The dollar cap is the cost limit.
+  MAX_TURNS: "30"
   MAX_BUDGET_USD: "0.50"
   MAX_DIFF_BYTES: "150000"
 
 jobs:
-  claude-review:
+  review:
+    name: claude-review (run)
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      status: ${{ steps.post.outputs.status }}
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -76,6 +88,7 @@ jobs:
       - name: Claude review (read-only tools, structured output)
         if: steps.gate.outputs.skip == 'false'
         id: review
+        continue-on-error: true   # an error here is reported by the post step, not by failing this job
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -111,10 +124,31 @@ jobs:
             --disallowedTools "Bash,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"
             --json-schema '{"type":"object","properties":{"summary":{"type":"string"},"blocking":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"line":{"type":"integer"},"finding":{"type":"string"}},"required":["finding"]}},"non_blocking":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"line":{"type":"integer"},"finding":{"type":"string"}},"required":["finding"]}}},"required":["summary","blocking","non_blocking"]}'
 
-      - name: Post the sticky review comment and set the check result
+      - name: Post the sticky review comment and publish the status
+        id: post
         if: always() && steps.gate.outcome == 'success'
         env:
           REVIEW_SKIPPED: ${{ steps.gate.outputs.skip }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
           REVIEW_JSON: ${{ steps.review.outputs.structured_output }}
         run: python3 .github/scripts/pr_review_comment.py
+
+  claude-review:
+    # The required status check. Runs only when the review reached a verdict (ok / blocking) or the fork gate
+    # refused it; for an errored run (status incomplete, noresult, or empty because the job crashed or timed out)
+    # this job is skipped, so the check passes as neutral and the comment carries the warning.
+    needs: review
+    if: always() && github.event.pull_request.draft == false && contains(fromJSON('["ok","blocking","skipped"]'), needs.review.outputs.status)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check result
+        env:
+          STATUS: ${{ needs.review.outputs.status }}
+        run: |
+          case "$STATUS" in
+            ok) echo "Claude review: no blocking findings" ;;
+            blocking) echo "::error::Claude review: blocking finding (see the PR comment)"; exit 1 ;;
+            skipped) echo "::error::Claude review not run: fork author is not on FORK_REVIEW_AUTHORS"; exit 1 ;;
+            *) echo "::error::unexpected status '$STATUS'"; exit 1 ;;
+          esac
