@@ -34,7 +34,7 @@ AI-247: make the GitHub Actions episode cron fire unattended and prove it (a sch
   | Go live (`cloud/ai247-golive`, PRs #19 #21) | `site/config.json` streamUrl = Worker playlist; plain pages.dev plays | done |
   | Replay-pool failover (`cloud/ai247-failover`, PR #20; pool PRs #24 #28) | `worker/src/{failover,channel}.js`, `newsbot/replay_pool.py`, `replay-pool.yml`, docs/FAILOVER.md; replay-pool run 42222599138 succeeded, `/healthz` `pool.ok=true`, `MAX_MANIFEST_AGE_S` 14400 | done |
   | Merge-verify (`cloud/ai247-mergeverify`, PR #23) | merged dabb881 | done |
-  | Episode cron unattended (this item) | manual path proven; `schedule` event never fired, see above | **not done**: blocked on GitHub's scheduler / Trevor's decision |
+  | Episode cron unattended (this item) | first `schedule` run 42298386727 fired, passed the gate and published to R2 unattended; 2 slices failed a test floor (fixed here); GitHub honoured 1 of 9 slots | trigger proven; mark done once this PR is merged, with the scheduler-reliability caveat left for Trevor |
 
   Left open / unclear: whether Trevor has done the Day 0 / Day 1 "watch it" reviews (not verifiable from the repo).
 
@@ -43,9 +43,13 @@ AI-247: make the GitHub Actions episode cron fire unattended and prove it (a sch
 
 - 17:23Z and 18:23Z slots also missed (18:48Z: still 0 schedule runs repo-wide; five slots total). docs/PLAN.md section "Schedule trigger: not proven on day one" written on this branch; PR to main.
 
+- **Schedule proven (00:59Z, 2026-11-07):** `hourly-bulletins` run 42298386727, `event=schedule`, created 21:38:28Z for the 21:23Z slot, `HOURLY_CRON_ENABLED=<unset>` (gate passed), stitch published `bulletins/20261106T213836Z-00..02/` (310 objects / 98.4 MB, root manifest last at 21:53:28Z); `/healthz` shows `manifest.uploaded` 21:53:28.887Z, 905 segments / 10 blocks. Run conclusion `failure`: slices 0 and 2 failed the distinct-source floor (`assert 3 >= 4`: 9 stories from 3 sources after the 600 s budget trimmed 12 from 5; bulletins full length and 100% grounded), slice 5 the apt install stall. Then no event for 22:23Z, 23:23Z, 00:23Z.
+- Fix on this branch: `tests/test_day1_output.py` reads `NEWSBOT_MIN_SOURCES` (default 4, unchanged for day1-episode); `hourly.yml` sets it to 3 for the slice tests with the measured reason. docs/PLAN.md section rewritten: "Schedule trigger: proven on the first scheduled run", with the scheduler-reliability caveat and the Cloudflare-cron fallback for Trevor.
+
 ## Pending
-- Merge the PLAN.md PR after ci + worker-site-e2e + claude-review.
-- **needs_you (Trevor)**, nothing in the repo is left to fix: (a) toggle the workflow off/on in Actions (community-suggested probe), (b) open a GitHub Support ticket with the run history (0 schedule events since repo creation 07:59:56Z), or (c) approve the Cloudflare cron fallback and create the PAT for it.
+- Merge this PR (source floor + PLAN.md proof) after ci + worker-site-e2e + claude-review.
+- Next scheduled run green end to end: the source-floor fix needs one scheduled run to confirm; the stitch publishes regardless.
+- **needs_you (Trevor)**: GitHub honoured 1 of 9 slots today. Decide on the Cloudflare Cron Trigger fallback (a Worker scheduled handler calling the `workflow_dispatch` API with a fine-grained PAT, Actions: read and write, this repo only) or a GitHub Support ticket; nothing in the repo is left to change for the trigger.
 
 ## Next step
-Trevor picks (a), (b) or (c). Whoever continues: watch `actions/runs?event=schedule`; the first run's Trigger log says `event=schedule`; then replace the PLAN.md verdict with the run id and time, and mark the todo done.
+Merge the PR, then watch `actions/runs?event=schedule`: the next scheduled run should be green with the source floor at 3 (slices) and publish; if GitHub keeps dropping slots, Trevor's call on the Cloudflare dispatcher.

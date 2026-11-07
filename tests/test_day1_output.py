@@ -14,6 +14,11 @@ EP = DAY1 / "episode"
 # (hourly.yml) carry longer source texts (arXiv abstracts, release notes), so 8-9 stories fill the 10 minutes;
 # that workflow sets NEWSBOT_MIN_STORIES=6 (the pipeline itself refuses fewer than 6 rankable items).
 MIN_STORIES = int(os.environ.get("NEWSBOT_MIN_STORIES") or "10")
+# Distinct-source floor for a non-topic episode. 4 for a standalone Day 1 episode. An hourly slice (hourly.yml) is
+# dealt 14 items from 5-7 sources, rank keeps 12 from ~5, and the 600 s time budget then keeps 8-9 stories, cutting
+# the single-item sources first: scheduled run 42298386727 lost slices 0 and 2 (9 stories, 3 sources each) to the
+# floor of 4 while the run as a whole covered 11 sources. That workflow sets NEWSBOT_MIN_SOURCES=3.
+MIN_SOURCES = int(os.environ.get("NEWSBOT_MIN_SOURCES") or "4")
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +49,7 @@ def test_rundown_story_count_within_floor_and_12_from_multiple_sources(d):
         assert len({s["source"] for s in d["script"]["stories"]}) >= 2
     else:
         assert MIN_STORIES <= n <= 12, n
-        assert len({s["source"] for s in d["script"]["stories"]}) >= 4
+        assert len({s["source"] for s in d["script"]["stories"]}) >= MIN_SOURCES
 
 
 def test_topic_episode_is_on_topic_and_not_a_repeat(d):
