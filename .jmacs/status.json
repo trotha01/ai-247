@@ -1,1 +1,1 @@
-{"state":"running","msg":"Page live (PR #52 merged): https://ai-247.pages.dev/puddle-architecture.html; follow-up PR renames the Worker to puddle-live after #54"}
+{"state": "done", "msg": "AI-247 architecture page live: https://ai-247.pages.dev/puddle-architecture.html (PR #52 v2 + PR #55 puddle-live rename merged; render check in worker-site-e2e; linked from site footer and README)"}

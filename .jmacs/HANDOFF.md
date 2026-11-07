@@ -9,9 +9,10 @@ AI-247: architecture page that visualizes Puddle Park's nodes (showrunner, write
 - Live check (09:17Z, headless, 360 px): https://ai-247.pages.dev/puddle-architecture.html returns 200 with 15 nodes and 19 edges. Panels open, there is no horizontal scroll and no JS errors, and none of the trimmed strings appear. The ai-247 footer links it.
 - Follow-up on this branch: PR #54 renamed the Puddle Park Worker aitv-live to puddle-live while #52 was in review. The page now names puddle-live and links studio/cloudflare/puddle-live/wrangler.toml and .github/workflows/deploy-puddle.yml. The path check also covers .github/ (44 paths, all exist).
 
+- PR #55 (merged 121dcd9, 09:22Z, all checks green, 0 blocking review findings). The deploy run for 121dcd9 succeeded. The live page (Pages serves it through a 308 to the extensionless path) now shows puddle-live and links its wrangler.toml and deploy-puddle.yml.
+
 ## Pending
-- Follow-up PR checks, then merge.
-- jmacs todo-status done with the page URL: jmacs is not installed in cloud sessions, so the orchestrator applies it from status.json.
+- Todo "AI-247: architecture page that visualizes Puddle Park's nodes": jmacs is not installed in cloud sessions. The orchestrator should mark it done with https://ai-247.pages.dev/puddle-architecture.html.
 
 ## Next step
-Merge the follow-up PR when green. Nothing else.
+None. If studio/ changes names or loops, update NODES in site/puddle-architecture.html; the render check fails on any missing path.
